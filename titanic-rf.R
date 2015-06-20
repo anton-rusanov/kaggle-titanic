@@ -63,7 +63,6 @@ munge_data <- function(all_data) {
   # We make a prediction of a passengers Age using the other variables and a decision tree model. 
   # This time you give method="anova" since you are predicting a continuous variable.
   
-  # TODO: Initialize Title and use that in prediction
   predicted_age <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title,
                          data=all_data[!is.na(all_data$Age),], method="anova")
   all_data$Age[is.na(all_data$Age)] <- predict(predicted_age, all_data[is.na(all_data$Age),])
@@ -124,7 +123,6 @@ predict_survival =  function() {
   print('Starting RF model building')
   # Apply the Random Forest Algorithm
   
-  # TODO: Initialize Title and use that in prediction
   my_forest <- randomForest(
     as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title, 
     train, 
