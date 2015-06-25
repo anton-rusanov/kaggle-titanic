@@ -21,7 +21,7 @@ prepare_data <- function() {
   missing_types <- c('NA', '')
   
   if (!file.exists('train.csv') || !file.exists('test.csv')) {
-    stop(paste("train.csv or test.csv not found in working directory", getwd()))
+    stop(paste("train.csv or test.csv not found in working directory ", getwd()))
   }
   
   train_data <- read.csv('train.csv', 
@@ -40,6 +40,16 @@ prepare_data <- function() {
   
   print('Consolidating titles')
   all_data$Title <- consolidate_titles(all_data)
+  
+  print('Adding FamilySize')
+  all_data$FamilySize <- all_data$SibSp + all_data$Parch + 1
+  
+  print('Adding FamilySizeFactor')
+  all_data$FamilySizeFactor <- 'NA'
+  all_data$FamilySizeFactor[which(all_data$FamilySize == 1)] <- 'Single'
+  all_data$FamilySizeFactor[which(all_data$FamilySize > 1 & all_data$FamilySize <= 4)] <- 'Small'
+  all_data$FamilySizeFactor[which(all_data$FamilySize > 4)] <- 'Large'
+  all_data$FamilySizeFactor <- as.factor(all_data$FamilySizeFactor)
   
   print('Munging data')
   all_data <- munge_data(all_data);
@@ -62,7 +72,6 @@ munge_data <- function(all_data) {
   # How to fill in missing Age values?
   # We make a prediction of a passengers Age using the other variables and a decision tree model. 
   # This time you give method="anova" since you are predicting a continuous variable.
-  
   predicted_age <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title,
                          data=all_data[!is.na(all_data$Age),], method="anova")
   all_data$Age[is.na(all_data$Age)] <- predict(predicted_age, all_data[is.na(all_data$Age),])
@@ -89,9 +98,9 @@ change_titles <- function(data, old.titles, new.title) {
 ## Title consolidation
 consolidate_titles <- function(data) {
   data$Title <- change_titles(data, 
-                              c("Capt", "Col", "Don", "Dr", "Jonkheer", "Lady", "Major", "Rev", "Sir"),
+                              c("Capt", "Col", "Don", "Dr", "Jonkheer", "Major", "Rev", "Sir"),
                               "Noble")
-  data$Title <- change_titles(data, c("the Countess", "Ms"), "Mrs")
+  data$Title <- change_titles(data, c("the Countess", "Ms", "Lady"), "Mrs")
   data$Title <- change_titles(data, c("Mlle", "Mme"), "Miss")
   data$Title <- as.factor(data$Title)
   return (data$Title)
@@ -100,6 +109,7 @@ consolidate_titles <- function(data) {
 predict_survival =  function() {
   
   library(Amelia)
+  library(party)
   library(randomForest)
   library(rpart)
   library(stats)
@@ -113,9 +123,15 @@ predict_survival =  function() {
   train <- all_data[1:891,]
   test <- all_data[892:1309,]
   
-  # Train set and test set
+  # Train set and test set structure
   #str(train)
   #str(test)
+  
+  # Dataset summaries and plots
+  print(summary(all_data))
+  print('')
+  print(summary(train))
+  mosaicplot(train$FamilySize ~ train$Survived, xlab="FamilySize", ylab="Survived")
   
   # Set seed for reproducibility
   set.seed(111)
@@ -124,20 +140,30 @@ predict_survival =  function() {
   # Apply the Random Forest Algorithm
   
   my_forest <- randomForest(
-    as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title, 
+    as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + FamilySizeFactor, 
     train, 
     importance = TRUE, 
-    ntree = 10000) #TODO: set to 1000 
+    ntree = 2000)
 
   print('Starting prediction')
-    # Make your prediction using the test set
-  my_prediction <- predict(my_forest, test)
+  # Make your prediction using the test set
+  rf_prediction <- predict(my_forest, test)
   
   # Create a data frame with two columns: PassengerId & Survived. Survived contains your predictions
-  my_solution <- data.frame(PassengerId = test$PassengerId, Survived = my_prediction)
+  rf_solution <- data.frame(PassengerId = test$PassengerId, Survived = rf_prediction)
   
-  # Write your solution away to a csv file with the name my_solution.csv
-  write.csv(my_solution, file="my_solution.csv", row.names=FALSE, quote=FALSE)
+  print('Starting CI model building')
+  cond_inf_forest <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
+      data = train, controls=cforest_unbiased(ntree=2000, mtry=3))
+
+  print('Starting CI prediction')
+  cond_inf_prediction <- predict(cond_inf_forest, test, OOB=TRUE, type = "response")
+  cond_inf_solution <- data.frame(PassengerId = test$PassengerId, Survived = cond_inf_prediction)
+  
+  # Write your solution away to a csv file with the name rf_solution.csv
+  write.csv(rf_solution, file="titanic-rf.csv", row.names=FALSE, quote=FALSE)
+  write.csv(cond_inf_solution, file="titanic-ci.csv", row.names=FALSE, quote=FALSE)
+  
   print('Done!')
 }
 
