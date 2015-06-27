@@ -41,15 +41,18 @@ prepare_data <- function() {
   print('Consolidating titles')
   all_data$Title <- consolidate_titles(all_data)
   
-  print('Adding FamilySize')
-  all_data$FamilySize <- all_data$SibSp + all_data$Parch + 1
-  
-  print('Adding FamilySizeFactor')
-  all_data$FamilySizeFactor <- create_family_size_factor(all_data)
-  
   print('Munging data')
   all_data <- munge_data(all_data)
   
+  print('Adding FamilySize')
+  all_data$FamilySize <- all_data$SibSp + all_data$Parch + 1
+
+  print('Adding FamilySizeFactor')
+  all_data$FamilySizeFactor <- create_family_size_factor(all_data)
+
+  print('Adding binary columns')
+  all_data <- with_binary_columns(all_data)
+
   print('Finished preparing data')
   
   return (all_data)
@@ -94,9 +97,8 @@ change_titles <- function(data, old.titles, new.title) {
 ## Title consolidation
 consolidate_titles <- function(data) {
   data$Title <- change_titles(data, 
-                              c("Capt", "Col", "Don", "Dr", "Jonkheer", "Major", "Rev", "Sir"),
-                              "Noble")
-  data$Title <- change_titles(data, c("the Countess", "Ms", "Lady"), "Mrs")
+      c("Capt", "Col", "Don", "Dr", "Jonkheer", "Major", "Rev", "Sir"), "Noble")
+  data$Title <- change_titles(data, c("the Countess", "Ms", "Lady", "Dona"), "Mrs")
   data$Title <- change_titles(data, c("Mlle", "Mme"), "Miss")
   data$Title <- as.factor(data$Title)
   return (data$Title)
@@ -104,10 +106,45 @@ consolidate_titles <- function(data) {
 
 ## Create FamilySizeFactor column
 create_family_size_factor <- function(data) {
-  data$FamilySizeFactor <- ifelse(data$FamilySize <= 4, 'Small', 'Large')
-  data$FamilySizeFactor <- ifelse(data$FamilySize == 1, 'Single', 'Small')
+  data$FamilySizeFactor <- ifelse(data$FamilySize <= 4,
+      (if (data$FamilySize == 1) 'Single' else 'Small'),
+      'Large')
+  data$FamilySizeFactor[data$FamilySize <= 4] <-
+      ifelse(data$FamilySize[data$FamilySize <= 4] == 1, 'Single', 'Small')
+
+
   data$FamilySizeFactor <- as.factor(data$FamilySizeFactor)
   return (data$FamilySizeFactor)
+}
+
+## Create binary columns for existing factor features, for logistic regression
+with_binary_columns <- function(data) {
+  # FamilySizeFactor
+  data$FamilySizeSingle <- as.numeric(data$FamilySizeFactor == 'Single')
+  data$FamilySizeSmall <- as.numeric(data$FamilySizeFactor == 'Small')
+  data$FamilySizeLarge <- as.numeric(data$FamilySizeFactor == 'Large')
+
+  # Pclass
+  data$Pclass1 <- as.numeric(data$Pclass == 1)
+  data$Pclass2 <- as.numeric(data$Pclass == 2)
+  data$Pclass3 <- as.numeric(data$Pclass == 3)
+
+  # Sex
+  data$SexFemale <- as.numeric(data$Sex == 'female')
+
+  # Embarked
+  data$EmbarkedC <- as.numeric(data$Embarked == 'C')
+  data$EmbarkedQ <- as.numeric(data$Embarked == 'Q')
+  data$EmbarkedS <- as.numeric(data$Embarked == 'S')
+
+  # Title
+  data$TitleMaster = as.numeric(data$Title == 'Master')
+  data$TitleMiss = as.numeric(data$Title == 'Miss')
+  data$TitleMr = as.numeric(data$Title == 'Mr')
+  data$TitleMrs = as.numeric(data$Title == 'Mrs')
+  data$TitleNoble = as.numeric(data$Title == 'Noble')
+
+  return (data)
 }
 
 predict_survival =  function() {
