@@ -16,7 +16,7 @@ prepare_data <- function() {
     'factor'     # Embarked
   )
   
-  test_column_types <- train_column_types[-2]     # # no Survived column in test.csv
+  test_column_types <- train_column_types[-2]     ## no Survived column in test.csv
   
   missing_types <- c('NA', '')
   
@@ -45,14 +45,10 @@ prepare_data <- function() {
   all_data$FamilySize <- all_data$SibSp + all_data$Parch + 1
   
   print('Adding FamilySizeFactor')
-  all_data$FamilySizeFactor <- 'NA'
-  all_data$FamilySizeFactor[which(all_data$FamilySize == 1)] <- 'Single'
-  all_data$FamilySizeFactor[which(all_data$FamilySize > 1 & all_data$FamilySize <= 4)] <- 'Small'
-  all_data$FamilySizeFactor[which(all_data$FamilySize > 4)] <- 'Large'
-  all_data$FamilySizeFactor <- as.factor(all_data$FamilySizeFactor)
+  all_data$FamilySizeFactor <- create_family_size_factor(all_data)
   
   print('Munging data')
-  all_data <- munge_data(all_data);
+  all_data <- munge_data(all_data)
   
   print('Finished preparing data')
   
@@ -106,9 +102,18 @@ consolidate_titles <- function(data) {
   return (data$Title)
 }
 
+## Create FamilySizeFactor column
+create_family_size_factor <- function(data) {
+  data$FamilySizeFactor <- ifelse(data$FamilySize <= 4, 'Small', 'Large')
+  data$FamilySizeFactor <- ifelse(data$FamilySize == 1, 'Single', 'Small')
+  data$FamilySizeFactor <- as.factor(data$FamilySizeFactor)
+  return (data$FamilySizeFactor)
+}
+
 predict_survival =  function() {
   
   library(Amelia)
+  library(glmnet)
   library(party)
   library(randomForest)
   library(rpart)
@@ -140,10 +145,11 @@ predict_survival =  function() {
   # Apply the Random Forest Algorithm
   
   my_forest <- randomForest(
-    as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + FamilySizeFactor, 
-    train, 
-    importance = TRUE, 
-    ntree = 2000)
+      as.factor(Survived) ~
+          Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + FamilySizeFactor,
+      train,
+      importance = TRUE,
+      ntree = 2000)
 
   print('Starting prediction')
   # Make your prediction using the test set
@@ -153,7 +159,8 @@ predict_survival =  function() {
   rf_solution <- data.frame(PassengerId = test$PassengerId, Survived = rf_prediction)
   
   print('Starting CI model building')
-  cond_inf_forest <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
+  cond_inf_forest <- cforest(
+      as.factor(Survived) ~ Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
       data = train, controls=cforest_unbiased(ntree=2000, mtry=3))
 
   print('Starting CI prediction')
@@ -167,4 +174,4 @@ predict_survival =  function() {
   print('Done!')
 }
 
-predict_survival();
+predict_survival()
