@@ -1,3 +1,12 @@
+library(Amelia)
+library(data.table)
+library(glmnet)
+library(party)
+library(randomForest)
+library(rpart)
+library(stats)
+
+
 
 prepare_data <- function() {
   print('Started preparing data')
@@ -34,7 +43,7 @@ prepare_data <- function() {
   
   # All data, both training and test set
   all_data <- rbind(train_data, cbind(test_data, Survived=0))
-  
+
   print('Extracting titles')
   all_data$Title <- get_title(all_data)
   
@@ -43,12 +52,18 @@ prepare_data <- function() {
   
   print('Munging data')
   all_data <- munge_data(all_data)
-  
+
   print('Adding FamilySize')
   all_data$FamilySize <- all_data$SibSp + all_data$Parch + 1
 
   print('Adding FamilySizeFactor')
   all_data$FamilySizeFactor <- create_family_size_factor(all_data)
+
+  print('Adding WithSameTicket')
+  all_data$WithSameTicket <- count_people_with_same_ticket(all_data)
+
+  print('Adding RealFare')
+  all_data$RealFare <- calculate_real_fare(all_data)
 
   print('Adding binary columns')
   all_data <- with_binary_columns(all_data)
@@ -107,7 +122,7 @@ consolidate_titles <- function(data) {
 ## Create FamilySizeFactor column
 create_family_size_factor <- function(data) {
   data$FamilySizeFactor <- ifelse(data$FamilySize <= 4,
-      (if (data$FamilySize == 1) 'Single' else 'Small'),
+      ifelse(data$FamilySize == 1, 'Single', 'Small'),
       'Large')
   data$FamilySizeFactor[data$FamilySize <= 4] <-
       ifelse(data$FamilySize[data$FamilySize <= 4] == 1, 'Single', 'Small')
@@ -117,12 +132,28 @@ create_family_size_factor <- function(data) {
   return (data$FamilySizeFactor)
 }
 
+
+## Counts people who have the same ticket number.
+# TODO: Use this instead of family size?
+# TODO: Use data.table instead of data.frame everywhere?
+count_people_with_same_ticket <- function(data) {
+  dt <- data.table(data)
+  dt[, WithSameTicket := length(unique(PassengerId)), by=Ticket]
+  return (dt$WithSameTicket)
+}
+
+
+## Calculates the ticket fare divided by the number of people on that ticket.
+calculate_real_fare <- function(data) {
+  return (data$Fare / data$WithSameTicket)
+}
+
 ## Create binary columns for existing factor features, for logistic regression
 with_binary_columns <- function(data) {
   # FamilySizeFactor
-  data$FamilySizeSingle <- as.numeric(data$FamilySizeFactor == 'Single')
-  data$FamilySizeSmall <- as.numeric(data$FamilySizeFactor == 'Small')
-  data$FamilySizeLarge <- as.numeric(data$FamilySizeFactor == 'Large')
+  data$FamilySizeFactorSingle <- as.numeric(data$FamilySizeFactor == 'Single')
+  data$FamilySizeFactorSmall <- as.numeric(data$FamilySizeFactor == 'Small')
+  data$FamilySizeFactorLarge <- as.numeric(data$FamilySizeFactor == 'Large')
 
   # Pclass
   data$Pclass1 <- as.numeric(data$Pclass == 1)
@@ -148,14 +179,6 @@ with_binary_columns <- function(data) {
 }
 
 predict_survival =  function() {
-  
-  library(Amelia)
-  library(glmnet)
-  library(party)
-  library(randomForest)
-  library(rpart)
-  library(stats)
-  
   all_data = prepare_data()
   
   ## Map missing data by feature
@@ -177,7 +200,26 @@ predict_survival =  function() {
   
   # Set seed for reproducibility
   set.seed(111)
-  
+
+  # Apply Logistic Regression
+  print('Starting LR model building')
+  lr_columns = c('Pclass1', 'Pclass2', 'Pclass3',
+      'SexFemale', 'Age', 'Fare',
+      'SibSp', 'Parch',
+      'FamilySizeFactorSingle', 'FamilySizeFactorSmall', 'FamilySizeFactorLarge',
+      'EmbarkedC', 'EmbarkedQ', 'EmbarkedS',
+      'TitleMaster', 'TitleMiss', 'TitleMr', 'TitleMrs', 'TitleNoble')
+  x_train <- train[, lr_columns]
+  y_train <- train[, 'Survived']
+  # TODO: Set up logistic regression prediction, when features are normalized. Use as.matrix?
+
+#  lr = glmnet(x=x_train, y=y_train, alpha=1, family='binomial')
+#  plot(lr)
+#  print('Starting LR prediction')
+#  lr_prediction = predict(lr, newx = test[, lr_columns], type = 'class')
+#  lr_solution <- data.frame(PassengerId = test$PassengerId, Survived = lr_prediction)
+#  write.csv(lr_solution, file="titanic-lr.csv", row.names=FALSE, quote=FALSE)
+
   print('Starting RF model building')
   # Apply the Random Forest Algorithm
   
@@ -188,13 +230,14 @@ predict_survival =  function() {
       importance = TRUE,
       ntree = 2000)
 
-  print('Starting prediction')
+  print('Starting RF prediction')
   # Make your prediction using the test set
   rf_prediction <- predict(my_forest, test)
   
   # Create a data frame with two columns: PassengerId & Survived. Survived contains your predictions
   rf_solution <- data.frame(PassengerId = test$PassengerId, Survived = rf_prediction)
-  
+  write.csv(rf_solution, file="titanic-rf.csv", row.names=FALSE, quote=FALSE)
+
   print('Starting CI model building')
   cond_inf_forest <- cforest(
       as.factor(Survived) ~ Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
@@ -205,10 +248,9 @@ predict_survival =  function() {
   cond_inf_solution <- data.frame(PassengerId = test$PassengerId, Survived = cond_inf_prediction)
   
   # Write your solution away to a csv file with the name rf_solution.csv
-  write.csv(rf_solution, file="titanic-rf.csv", row.names=FALSE, quote=FALSE)
   write.csv(cond_inf_solution, file="titanic-ci.csv", row.names=FALSE, quote=FALSE)
-  
+
   print('Done!')
 }
 
-predict_survival()
+#predict_survival()
