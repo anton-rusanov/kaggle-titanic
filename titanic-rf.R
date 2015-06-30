@@ -214,6 +214,7 @@ predict_with_logistic_regression <- function(train, test) {
 #  lr_prediction = predict(lr, newx = test[, lr_columns], type = 'class')
 #  lr_solution <- data.frame(PassengerId = test$PassengerId, Survived = lr_prediction)
 #  write.csv(lr_solution, file="titanic-lr.csv", row.names=FALSE, quote=FALSE)
+#  return (lr_solution)
 }
 
 
@@ -226,7 +227,16 @@ predict_with_random_forest <- function(train, test) {
           Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title,
       train,
       importance = TRUE,
+      proximity = TRUE,
       ntree = 2000)
+  # TODO Check nodesize=10, Setting this number larger causes smaller trees to be grown
+  # TODO Check replace=TRUE, Should sampling of cases be done with or without replacement?
+  print('Variable importance')
+  print(round(importance(my_forest), 2))
+#  varImpPlot(my_forest)
+#  print('Variable proximity')
+#  print(summary(my_forest$proximity))
+
 
   print('Starting RF prediction')
   # Make your prediction using the test set
@@ -235,16 +245,16 @@ predict_with_random_forest <- function(train, test) {
   # Create a data frame with two columns: PassengerId & Survived. Survived contains your predictions
   rf_solution <- data.frame(PassengerId = test$PassengerId, Survived = rf_prediction)
   write.csv(rf_solution, file="titanic-rf.csv", row.names=FALSE, quote=FALSE)
+  return (rf_solution)
 }
 
 
-predict_with_conditional_inference_forest <- function(train, test) {
-  print('Starting CI model building')
+predict_with_conditional_inference_forest <- function(train, test, formula, suffix) {
+  print(paste('Starting CI model building', formula))
   # TODO CI with and w/o WithSameTicket differ in 4 rows, but result in the same score.
   # TODO Create an ensemble of those two + RF + LR + something else for odd count of voters!
   cond_inf_forest <- cforest(
-      as.factor(Survived) ~
-      Pclass + Sex + Age + RealFare + Embarked + Title + FamilySizeFactor + WithSameTicket,
+      formula,
       data = train, controls=cforest_unbiased(ntree=2000, mtry=3))
 
   print('Starting CI prediction')
@@ -252,9 +262,19 @@ predict_with_conditional_inference_forest <- function(train, test) {
   cond_inf_solution <- data.frame(PassengerId = test$PassengerId, Survived = cond_inf_prediction)
 
   # Write your solution away to a csv file with the name rf_solution.csv
-  write.csv(cond_inf_solution, file="titanic-ci.csv", row.names=FALSE, quote=FALSE)
+  write.csv(cond_inf_solution, file=paste0('titanic-ci-', suffix, '.csv'), row.names=FALSE, quote=FALSE)
+  return (cond_inf_solution)
 }
 
+
+predict_with_ensemble <- function(predictions, passengerIds) {
+  print('Building ensemble solution')
+  # TODO Why round(..) returns 1 or 2?
+  ensemble_prediction <- round(rowMeans(predictions)) - 1
+  ensemble_solution <- data.frame(PassengerId = passengerIds, Survived = ensemble_prediction)
+  write.csv(ensemble_solution, file='titanic-ensemble.csv', row.names=FALSE, quote=FALSE)
+  return (ensemble_solution)
+}
 
 predict_survival =  function() {
   all_data = prepare_data()
@@ -267,16 +287,30 @@ predict_survival =  function() {
   print(summary(all_data))
   print('')
   print(summary(train))
-  mosaicplot(train$FamilySize ~ train$Survived, xlab="FamilySize", ylab="Survived")
+  mosaicplot(train$FamilySize ~ train$Survived, xlab='FamilySize', ylab='Survived')
   
   # Set seed for reproducibility
   set.seed(111)
 
   predict_with_logistic_regression(train, test)
 
-  predict_with_random_forest(train, test)
+  rf_solution <- predict_with_random_forest(train, test)
 
-  predict_with_conditional_inference_forest(train, test)
+  cif_base_solution <- predict_with_conditional_inference_forest(train, test,
+      as.factor(Survived) ~
+          Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
+      'base')
+
+  cif_same_ticket_solution <- predict_with_conditional_inference_forest(train, test,
+      as.factor(Survived) ~
+          Pclass + Sex + Age + RealFare + Embarked + Title + FamilySizeFactor + WithSameTicket,
+      'same-ticket')
+
+  ensemble_solution <- predict_with_ensemble(
+      cbind(rf = rf_solution$Survived,
+          cifb = cif_base_solution$Survived,
+          cifst = cif_same_ticket_solution$Survived),
+      test$PassengerId)
 
   print('Done!')
 }
