@@ -44,64 +44,42 @@ prepare_data <- function() {
   # All data, both training and test set
   all_data <- rbind(train_data, cbind(test_data, Survived=0))
 
-  print('Extracting titles')
-  all_data$Title <- get_title(all_data)
+  ## Map missing data by feature
+  #missmap(all_data, main="Titanic Training Data - Missings Map", legend=FALSE)
+
+  all_data$Title <- extract_titles(all_data)
   
-  print('Consolidating titles')
   all_data$Title <- consolidate_titles(all_data)
   
-  print('Munging data')
-  all_data <- munge_data(all_data)
+  all_data <- filling_missing_entries(all_data)
 
-  print('Adding FamilySize')
-  all_data$FamilySize <- all_data$SibSp + all_data$Parch + 1
+  all_data$FamilySize <- create_family_size(all_data)
 
-  print('Adding FamilySizeFactor')
   all_data$FamilySizeFactor <- create_family_size_factor(all_data)
 
-  print('Adding WithSameTicket')
   all_data$WithSameTicket <- count_people_with_same_ticket(all_data)
 
-  print('Adding RealFare')
   all_data$RealFare <- calculate_real_fare(all_data)
 
-  print('Adding binary columns')
   all_data <- with_binary_columns(all_data)
 
   print('Finished preparing data')
-  
+
   return (all_data)
 }
 
-munge_data <- function(all_data) {
-  # Passenger on row 62 and 830 do not have a value for embarkment. 
-  # Since many passengers embarked at Southampton, we give them the value S.
-  # We code all embarkment codes as factors.
-  all_data$Embarked[c(62,830)] = "S"
-  all_data$Embarked <- factor(all_data$Embarked)
-  
-  # Passenger on row 1044 has an NA Fare value. Let's replace it with the median fare value.
-  all_data$Fare[1044] <- median(all_data$Fare, na.rm=TRUE)
-  
-  # How to fill in missing Age values?
-  # We make a prediction of a passengers Age using the other variables and a decision tree model. 
-  # This time you give method="anova" since you are predicting a continuous variable.
-  predicted_age <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title,
-                         data=all_data[!is.na(all_data$Age),], method="anova")
-  all_data$Age[is.na(all_data$Age)] <- predict(predicted_age, all_data[is.na(all_data$Age),])
-  
-  return (all_data)
-}
 
-## function for extracting honorific (i.e. title) from the Name feature
-get_title <- function(data) {
+## Extracts honorific (i.e. title) from the Name feature
+extract_titles <- function(data) {
+  print('Extracting titles')
   title.dot.start <- regexpr("\\,[A-Z ]{1,20}\\.", data$Name, TRUE)
   title.comma.end <- title.dot.start + attr(title.dot.start, "match.length") - 1
   data$Title <- substr(data$Name, title.dot.start + 2, title.comma.end - 1)
   return (data$Title)
 }   
 
-## function for assigning a new title value to old title(s) 
+
+## Assigns a new title value to old title(s)
 change_titles <- function(data, old.titles, new.title) {
   for (honorific in old.titles) {
     data$Title[which(data$Title == honorific)] <- new.title
@@ -109,9 +87,11 @@ change_titles <- function(data, old.titles, new.title) {
   return (data$Title)
 }
 
+
 ## Title consolidation
 consolidate_titles <- function(data) {
-  data$Title <- change_titles(data, 
+  print('Consolidating titles')
+  data$Title <- change_titles(data,
       c("Capt", "Col", "Don", "Dr", "Jonkheer", "Major", "Rev", "Sir"), "Noble")
   data$Title <- change_titles(data, c("the Countess", "Ms", "Lady", "Dona"), "Mrs")
   data$Title <- change_titles(data, c("Mlle", "Mme"), "Miss")
@@ -119,8 +99,40 @@ consolidate_titles <- function(data) {
   return (data$Title)
 }
 
+
+## Fills missing entries with median or predicted values.
+filling_missing_entries <- function(all_data) {
+  print('Filling missing entries')
+  # Passenger on row 62 and 830 do not have a value for embarkment.
+  # Since many passengers embarked at Southampton, we give them the value S.
+  # We code all embarkment codes as factors.
+  all_data$Embarked[c(62,830)] = "S"
+  all_data$Embarked <- factor(all_data$Embarked)
+
+  # Passenger on row 1044 has an NA Fare value. Let's replace it with the median fare value.
+  all_data$Fare[1044] <- median(all_data$Fare, na.rm=TRUE)
+
+  # How to fill in missing Age values?
+  # We make a prediction of a passengers Age using the other variables and a decision tree model.
+  # This time you give method="anova" since you are predicting a continuous variable.
+  predicted_age <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title,
+                         data=all_data[!is.na(all_data$Age),], method="anova")
+  all_data$Age[is.na(all_data$Age)] <- predict(predicted_age, all_data[is.na(all_data$Age),])
+
+  return (all_data)
+}
+
+
+## Creates family size feature
+create_family_size <- function(data) {
+  print('Adding FamilySize')
+  return (data$SibSp + data$Parch + 1)
+}
+
+
 ## Create FamilySizeFactor column
 create_family_size_factor <- function(data) {
+  print('Adding FamilySizeFactor')
   data$FamilySizeFactor <- ifelse(data$FamilySize <= 4,
       ifelse(data$FamilySize == 1, 'Single', 'Small'),
       'Large')
@@ -134,9 +146,10 @@ create_family_size_factor <- function(data) {
 
 
 ## Counts people who have the same ticket number.
-# TODO: Use this instead of family size?
+# TODO: Combine this with the family size?
 # TODO: Use data.table instead of data.frame everywhere?
 count_people_with_same_ticket <- function(data) {
+  print('Adding WithSameTicket')
   dt <- data.table(data)
   dt[, WithSameTicket := length(unique(PassengerId)), by=Ticket]
   return (dt$WithSameTicket)
@@ -145,11 +158,14 @@ count_people_with_same_ticket <- function(data) {
 
 ## Calculates the ticket fare divided by the number of people on that ticket.
 calculate_real_fare <- function(data) {
+  print('Adding RealFare')
   return (data$Fare / data$WithSameTicket)
 }
 
+
 ## Create binary columns for existing factor features, for logistic regression
 with_binary_columns <- function(data) {
+  print('Adding binary columns')
   # FamilySizeFactor
   data$FamilySizeFactorSingle <- as.numeric(data$FamilySizeFactor == 'Single')
   data$FamilySizeFactorSmall <- as.numeric(data$FamilySizeFactor == 'Small')
@@ -178,29 +194,8 @@ with_binary_columns <- function(data) {
   return (data)
 }
 
-predict_survival =  function() {
-  all_data = prepare_data()
-  
-  ## Map missing data by feature
-  #missmap(all_data, main="Titanic Training Data - Missings Map", legend=FALSE)
-  
-  # Split the data back into a train set and a test set
-  train <- all_data[1:891,]
-  test <- all_data[892:1309,]
-  
-  # Train set and test set structure
-  #str(train)
-  #str(test)
-  
-  # Dataset summaries and plots
-  print(summary(all_data))
-  print('')
-  print(summary(train))
-  mosaicplot(train$FamilySize ~ train$Survived, xlab="FamilySize", ylab="Survived")
-  
-  # Set seed for reproducibility
-  set.seed(111)
 
+predict_with_logistic_regression <- function(train, test) {
   # Apply Logistic Regression
   print('Starting LR model building')
   lr_columns = c('Pclass1', 'Pclass2', 'Pclass3',
@@ -219,13 +214,16 @@ predict_survival =  function() {
 #  lr_prediction = predict(lr, newx = test[, lr_columns], type = 'class')
 #  lr_solution <- data.frame(PassengerId = test$PassengerId, Survived = lr_prediction)
 #  write.csv(lr_solution, file="titanic-lr.csv", row.names=FALSE, quote=FALSE)
+}
 
+
+predict_with_random_forest <- function(train, test) {
   print('Starting RF model building')
   # Apply the Random Forest Algorithm
-  
+
   my_forest <- randomForest(
       as.factor(Survived) ~
-          Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + FamilySizeFactor,
+          Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title,
       train,
       importance = TRUE,
       ntree = 2000)
@@ -233,24 +231,53 @@ predict_survival =  function() {
   print('Starting RF prediction')
   # Make your prediction using the test set
   rf_prediction <- predict(my_forest, test)
-  
+
   # Create a data frame with two columns: PassengerId & Survived. Survived contains your predictions
   rf_solution <- data.frame(PassengerId = test$PassengerId, Survived = rf_prediction)
   write.csv(rf_solution, file="titanic-rf.csv", row.names=FALSE, quote=FALSE)
+}
 
+
+predict_with_conditional_inference_forest <- function(train, test) {
   print('Starting CI model building')
+  # TODO CI with and w/o WithSameTicket differ in 4 rows, but result in the same score.
+  # TODO Create an ensemble of those two + RF + LR + something else for odd count of voters!
   cond_inf_forest <- cforest(
-      as.factor(Survived) ~ Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
+      as.factor(Survived) ~
+      Pclass + Sex + Age + RealFare + Embarked + Title + FamilySizeFactor + WithSameTicket,
       data = train, controls=cforest_unbiased(ntree=2000, mtry=3))
 
   print('Starting CI prediction')
   cond_inf_prediction <- predict(cond_inf_forest, test, OOB=TRUE, type = "response")
   cond_inf_solution <- data.frame(PassengerId = test$PassengerId, Survived = cond_inf_prediction)
-  
+
   # Write your solution away to a csv file with the name rf_solution.csv
   write.csv(cond_inf_solution, file="titanic-ci.csv", row.names=FALSE, quote=FALSE)
+}
+
+
+predict_survival =  function() {
+  all_data = prepare_data()
+
+  # Split the data back into a train set and a test set
+  train <- all_data[1:891,]
+  test <- all_data[892:1309,]
+  
+  # Dataset summaries and plots
+  print(summary(all_data))
+  print('')
+  print(summary(train))
+  mosaicplot(train$FamilySize ~ train$Survived, xlab="FamilySize", ylab="Survived")
+  
+  # Set seed for reproducibility
+  set.seed(111)
+
+  predict_with_logistic_regression(train, test)
+
+  predict_with_random_forest(train, test)
+
+  predict_with_conditional_inference_forest(train, test)
 
   print('Done!')
 }
 
-#predict_survival()
