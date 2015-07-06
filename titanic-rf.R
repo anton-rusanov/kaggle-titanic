@@ -148,6 +148,7 @@ create_family_size_factor <- function(data) {
 ## Counts people who have the same ticket number.
 # TODO: Combine this with the family size?
 # TODO: Use data.table instead of data.frame everywhere?
+# TODO: This could work the other way: AdultsOnTicket = TicketFare/Fare(Pclass)
 count_people_with_same_ticket <- function(data) {
   print('Adding WithSameTicket')
   dt <- data.table(data)
@@ -315,3 +316,14 @@ predict_survival =  function() {
   print('Done!')
 }
 
+# TODO
+#- Exploratory analysis in Excel
+#- Scale and center numeric features, esp. Fare
+#- Set up cross-validation
+#- Use ROC or accuracy as benchmark?
+#- Use more family-related insight (how many of them survived/perished/unknown?) kNN?
+#- LR
+#- Use cabin data
+#- Ensemble the models using probabilistic approach
+#- Embarked is another important feature that dictates the survival of female??
+#- investigate caretEnsemble?
