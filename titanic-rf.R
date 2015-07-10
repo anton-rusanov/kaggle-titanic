@@ -1,4 +1,5 @@
 library(Amelia)
+library(caret)
 library(data.table)
 library(glmnet)
 library(party)
@@ -60,6 +61,10 @@ prepare_data <- function() {
   all_data$WithSameTicket <- count_people_with_same_ticket(all_data)
 
   all_data$RealFare <- calculate_real_fare(all_data)
+
+  all_data$RealFareScaled <- scale_and_center_real_fare(all_data)
+
+  all_data$AgeScaled <- scale_and_center_age(all_data)
 
   all_data <- with_binary_columns(all_data)
 
@@ -170,7 +175,27 @@ calculate_real_fare <- function(data) {
 }
 
 
-## Create binary columns for existing factor features, for logistic regression
+## Scales and centers RealFare using caret.preProcess.
+scale_and_center_real_fare <- function(data) {
+  return (scale_and_center_column(data, 'RealFare'))
+}
+
+
+## Scales and centers Age using caret.preProcess.
+scale_and_center_age <- function(data) {
+  return (scale_and_center_column(data, 'Age'))
+}
+
+
+scale_and_center_column <- function(data, columnName) {
+  print(paste('Scaling and centering', columnName))
+  columnValues <- as.matrix(data[, columnName])
+  preProcessValues <- preProcess(columnValues, method = c("center", "scale"))
+  return (predict(preProcessValues, columnValues))
+}
+
+
+## Creates binary columns for existing factor features, for logistic regression
 with_binary_columns <- function(data) {
   print('Adding binary columns')
   # FamilySizeFactor
@@ -202,17 +227,16 @@ with_binary_columns <- function(data) {
 }
 
 
+## Applies Logistic Regression.
 predict_with_logistic_regression <- function(train, test) {
-  # Apply Logistic Regression
   print('Starting LR model building')
   lr_columns = c('Pclass1', 'Pclass2', 'Pclass3',
-      'SexFemale', 'Age', 'Fare',
-      'SibSp', 'Parch',
+      'SexFemale', 'AgeScaled', 'RealFareScaled',
       'FamilySizeFactorSingle', 'FamilySizeFactorSmall', 'FamilySizeFactorLarge',
       'EmbarkedC', 'EmbarkedQ', 'EmbarkedS',
       'TitleMaster', 'TitleMiss', 'TitleMr', 'TitleMrs', 'TitleNoble')
-  x_train <- train[, lr_columns]
-  y_train <- train[, 'Survived']
+  x_train <- as.matrix(train[, lr_columns])
+  y_train <- as.matrix(train[, 'Survived'])
   # TODO: Set up logistic regression prediction, when features are normalized. Use as.matrix?
 
 #  lr = glmnet(x=x_train, y=y_train, alpha=1, family='binomial')
@@ -225,13 +249,13 @@ predict_with_logistic_regression <- function(train, test) {
 }
 
 
+## Applies the Random Forest Algorithm.
 predict_with_random_forest <- function(train, test) {
   print('Starting RF model building')
-  # Apply the Random Forest Algorithm
 
   my_forest <- randomForest(
       as.factor(Survived) ~
-          Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title,
+          Pclass + Sex + Age + SibSp + Parch + RealFare + Embarked + Title,
       train,
       importance = TRUE,
       proximity = TRUE,
@@ -256,6 +280,7 @@ predict_with_random_forest <- function(train, test) {
 }
 
 
+## Applies the Conditional Inference Forest Algorithm
 predict_with_conditional_inference_forest <- function(train, test, formula, suffix) {
   print(paste('Starting CI model building', formula))
   # TODO CI with and w/o WithSameTicket differ in 4 rows, but result in the same score.
@@ -274,6 +299,7 @@ predict_with_conditional_inference_forest <- function(train, test, formula, suff
 }
 
 
+## Builds the ensemble solution.
 predict_with_ensemble <- function(predictions, passengerIds) {
   print('Building ensemble solution')
   # TODO Why round(..) returns (1 or 2) and not (0 or 1)?
@@ -312,6 +338,12 @@ predict_survival =  function() {
       as.factor(Survived) ~
           Pclass + Sex + Age + RealFare + Embarked + Title + FamilySizeFactor + WithSameTicket,
       'same-ticket')
+
+  cif_same_ticket_solution <- predict_with_conditional_inference_forest(train, test,
+      as.factor(Survived) ~
+          Pclass + Sex + AgeScaled + RealFareScaled + Embarked + Title + FamilySizeFactor + WithSameTicket,
+      'scaled')
+
 
   ensemble_solution <- predict_with_ensemble(
       cbind(rf = rf_solution$Survived,
