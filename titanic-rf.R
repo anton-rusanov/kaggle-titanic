@@ -65,6 +65,8 @@ prepare_data <- function() {
 
   print('Finished preparing data')
 
+  write.csv(all_data, file='all-data.csv', row.names=FALSE, quote=FALSE)
+
   return (all_data)
 }
 
@@ -117,7 +119,11 @@ filling_missing_entries <- function(all_data) {
   # This time you give method="anova" since you are predicting a continuous variable.
   predicted_age <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title,
                          data=all_data[!is.na(all_data$Age),], method="anova")
-  all_data$Age[is.na(all_data$Age)] <- predict(predicted_age, all_data[is.na(all_data$Age),])
+  predicted_age_values <- predict(predicted_age, all_data[is.na(all_data$Age),])
+  all_data$Age[is.na(all_data$Age)] <- predicted_age_values
+#  print('Predicted age:')
+#  print(predicted_age_values)
+
 
   return (all_data)
 }
@@ -270,7 +276,7 @@ predict_with_conditional_inference_forest <- function(train, test, formula, suff
 
 predict_with_ensemble <- function(predictions, passengerIds) {
   print('Building ensemble solution')
-  # TODO Why round(..) returns 1 or 2?
+  # TODO Why round(..) returns (1 or 2) and not (0 or 1)?
   ensemble_prediction <- round(rowMeans(predictions)) - 1
   ensemble_solution <- data.frame(PassengerId = passengerIds, Survived = ensemble_prediction)
   write.csv(ensemble_solution, file='titanic-ensemble.csv', row.names=FALSE, quote=FALSE)
@@ -317,13 +323,26 @@ predict_survival =  function() {
 }
 
 # TODO
-#- Exploratory analysis in Excel
+#- DONE Exploratory analysis in Excel
 #- Scale and center numeric features, esp. Fare
 #- Set up cross-validation
 #- Use ROC or accuracy as benchmark?
-#- Use more family-related insight (how many of them survived/perished/unknown?) kNN?
+#- Use more family-related insight (how many of them survived/perished/unknown?) kNN? Special rules.
 #- LR
 #- Use cabin data
 #- Ensemble the models using probabilistic approach
 #- Embarked is another important feature that dictates the survival of female??
 #- investigate caretEnsemble?
+
+#- Findings of exploratory analysis:
+#--- Pre-process and use cabin numbers: split series and fix bad ones, like F E46.
+#--- In 6-digit ticket numbers, the first digit is class number, validate and drop
+#--- All 7-digit tickets start with 31, they are for class 3, drop the prefix
+#--- A.4 and A.5 tickets are class 3 only
+#--- All C.A. tickets are class 2 or 3, check more prefixes.
+#--- Check survival as a function of the ticket series
+#--- Investigate name spelling: Heikkinen, Honkanen, Heininen (ticket #s and ages are similar)
+#--- Compare efficiency of scaled family size vs boolean columns for factors
+#--- Age prediction sucks in pClass=3, peak around 28 yo.
+#    Try this: https://inclass.kaggle.com/c/deloitte-tackles-titanic/forums/t/9841/getting-high-scores-without-looking-at-actual-data-set/51120#post51120
+#--- survival ~ family size: 2=50%, 3 = 60%, 4=75%, 5=20%.
