@@ -309,6 +309,44 @@ predict_with_ensemble <- function(predictions, passengerIds) {
   return (ensemble_solution)
 }
 
+## Applies the Conditional Inference Forest Algorithm to show CrossTable graph
+show_cross_table_graph_with_ci_forest <- function(train, test, formula) {
+  print(paste('Starting CI model building (for CrossTable graph)', formula))
+ 
+  trainSet <- train[1:600,]
+  validationSet <- train[601:891,]
+  
+  cond_inf_forest <- cforest(
+    formula,
+    data = trainSet, controls=cforest_unbiased(ntree=2000, mtry=3))
+  
+  print('Starting CI prediction (for CrossTable graph)')
+  cond_inf_prediction <- predict(cond_inf_forest, validationSet, OOB=TRUE, type = "prob")
+  
+  show_cross_table_graph(validationSet, unlist(cond_inf_prediction), 0.5)
+
+}
+
+show_cross_table_graph <- function(data, predict, threshold) {
+  print('Showing CrossTable graph')
+  
+  v <- rep(NA, length(predict))
+  v <- ifelse(predict >= threshold & data$Survived == 1, "TP", v)
+  v <- ifelse(predict >= threshold & data$Survived == 0, "FP", v)
+  v <- ifelse(predict < threshold & data$Survived == 1, "FN", v)
+  v <- ifelse(predict < threshold & data$Survived == 0, "TN", v)
+  
+  df <- data.frame(real=as.factor(data$Survived), prediction=predict)
+  df$pred_type <- v
+  
+  ggplot(data=df, aes(x=real, y=prediction)) +
+    geom_violin(fill=rgb(1,1,1,alpha=0.6), color=NA) +
+    geom_jitter(aes(color=pred_type), shape=1) +
+    geom_hline(yintercept=threshold, color="red", alpha=0.6) +
+    scale_color_discrete(name="type") +
+    labs(title=sprintf("Threshold at %.2f", threshold))
+}
+
 predict_survival =  function() {
   all_data = prepare_data()
 
@@ -351,6 +389,9 @@ predict_survival =  function() {
           cifst = cif_same_ticket_solution$Survived),
       test$PassengerId)
 
+   show_cross_table_graph_with_ci_forest(train, test, as.factor(Survived) ~
+                                          Pclass + Sex + Age + RealFare + Embarked + Title + WithSameTicket)
+ 
   print('Done!')
 }
 
