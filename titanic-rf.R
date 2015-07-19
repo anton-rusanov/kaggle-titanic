@@ -4,7 +4,9 @@ library(data.table)
 library(e1071)
 library(gbm)
 library(glmnet)
+library(kernlab)
 library(party)
+library(pROC)
 library(randomForest)
 library(rpart)
 library(stats)
@@ -452,8 +454,8 @@ predict_with_caret_svm <- function(train, test, formula, suffix) {
     verbose = TRUE)
 
   print('Plotting model')
-  trellis.par.set(caretTheme())
-  plot(svmFit)
+#  trellis.par.set(caretTheme())
+#  plot(svmFit)
 # TODO: make the graphs work!
 #  plot(svmFit, metric = 'ROC') # ERROR: not enough paramteters
 
@@ -515,7 +517,7 @@ predict_with_ensemble <- function(predictions, passengerIds) {
 }
 
 predict_survival =  function() {
-  all_data = prepare_data()
+  all_data <- prepare_data()
 
   # Split the data back into a train set and a test set
   train <- all_data[1:891,]
@@ -578,7 +580,7 @@ predict_survival =  function() {
   print('Done!')
 }
 
-predict_survival()
+#predict_survival()
 
 # TODO
 #- DONE Exploratory analysis in Excel
