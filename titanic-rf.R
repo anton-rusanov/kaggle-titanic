@@ -572,14 +572,6 @@ predict_survival =  function() {
 #          cifst = cif_mother_solution$Survived),
 #      test$PassengerId)
 
-
-  ensemble_solution <- predict_with_ensemble(
-      cbind(rf = rf_solution$Survived,
-          cifb = cif_base_solution$Survived,
-          cifst = cif_same_ticket_solution$Survived),
-      test$PassengerId)
-
-
   show_cross_table_graph_with_ci_forest(train, test, as.factor(Survived) ~
       Pclass + Sex + Age + RealFare + Embarked + Title + WithSameTicket)
 
