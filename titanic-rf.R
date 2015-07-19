@@ -453,7 +453,7 @@ predict_with_caret_svm <- function(train, test, formula, suffix) {
 
   print('Plotting model')
   trellis.par.set(caretTheme())
-  plot(svmFit
+  plot(svmFit)
 # TODO: make the graphs work!
 #  plot(svmFit, metric = 'ROC') # ERROR: not enough paramteters
 
@@ -580,7 +580,8 @@ predict_survival =  function() {
       test$PassengerId)
 
 
-   show_cross_table_graph_with_ci_forest(train, test, as.factor(Survived) ~
+  show_cross_table_graph_with_ci_forest(train, test, as.factor(Survived) ~
+      Pclass + Sex + Age + RealFare + Embarked + Title + WithSameTicket)
 
   print('Done!')
 }
