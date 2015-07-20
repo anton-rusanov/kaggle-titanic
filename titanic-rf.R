@@ -6,6 +6,7 @@ library(gbm)
 library(glmnet)
 library(kernlab)
 library(party)
+library(plyr)
 library(pROC)
 library(randomForest)
 library(rpart)
@@ -282,6 +283,14 @@ with_binary_columns <- function(data) {
 }
 
 
+## Writes the given solution to a file.
+write_solution <- function(prediction, method, suffix, passengerIds) {
+  solution <- data.frame(PassengerId = passengerIds, Survived = prediction)
+  write.csv(solution, file=paste0('titanic-', method, '-', suffix, '.csv'), row.names=FALSE, quote=FALSE)
+  return (solution)
+}
+
+
 ## Creates a binary column indicating if the person is a mother.
 ## Requires that create_age_factor(..) and with_binary_columns(..) are called before.
 create_is_mother <- function(data) {
@@ -359,12 +368,11 @@ predict_with_random_forest <- function(train, test, formula, suffix) {
 
   print('Starting RF prediction')
   # Make your prediction using the test set
-  rf_prediction <- predict(my_forest, test)
-
-  # Create a data frame with two columns: PassengerId & Survived. Survived contains your predictions
-  rf_solution <- data.frame(PassengerId = test$PassengerId, Survived = rf_prediction)
-  write.csv(rf_solution, file=paste0('titanic-rf-', suffix, '.csv'), row.names=FALSE, quote=FALSE)
-  return (rf_solution)
+  predictionMatrix <- predict(my_forest, test, type = 'prob')
+  prediction <- as.data.frame(predictionMatrix)
+  prediction01 <- ifelse(prediction$Y >= 0.5, 1, 0)
+  write_solution(prediction01, 'rf', suffix, test$PassengerId)
+  return (prediction)
 }
 
 
@@ -386,45 +394,47 @@ predict_with_conditional_inference_forest <- function(train, test, formula, suff
 #  cond_importance
 
   print('Starting CI prediction')
-  cond_inf_prediction <- predict(cond_inf_forest, test, OOB=TRUE, type = 'response')
-  cond_inf_prediction01 <- ifelse(cond_inf_prediction == 'Y', 1, 0)
-  cond_inf_solution <- data.frame(PassengerId = test$PassengerId, Survived = cond_inf_prediction01)
-
-  # Write your solution away to a csv file 
-  write.csv(cond_inf_solution, file=paste0('titanic-ci-', suffix, '.csv'), row.names=FALSE, quote=FALSE)
-  return (cond_inf_solution)
+  predictionList <- predict(cond_inf_forest, test, OOB=TRUE, type = 'prob')
+  predictionN <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[1]))
+  predictionY <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[2]))
+  prediction <- data.frame(Y = predictionY, N = predictionN)
+  prediction01 <- ifelse(prediction$Y >= 0.5, 1, 0)
+  write_solution(prediction01, 'ci', suffix, test$PassengerId)
+  return (prediction)
 }
 
 
 ## Applies the Conditional Inference Forest Algorithm to show CrossTable graph
-show_cross_table_graph_with_ci_forest <- function(train, test, formula) {
-  print(paste('Starting CI model building (for CrossTable graph)', formula))
+show_cross_table_graph_with_ci_forest <- function(train, test, formula, suffix) {
+  print(paste('Starting CI model building (for CrossTable graph)', suffix))
  
   trainSet <- train[1:600,]
   validationSet <- train[601:891,]
   
   cond_inf_forest <- cforest(
     formula,
-    data = trainSet, controls=cforest_unbiased(ntree=2000, mtry=3))
+    data = trainSet, controls=cforest_unbiased(ntree=1000, mtry=3))
   
   print('Starting CI prediction (for CrossTable graph)')
-  cond_inf_prediction <- predict(cond_inf_forest, validationSet, OOB=TRUE, type = "prob")
-  
-  show_cross_table_graph(validationSet, unlist(cond_inf_prediction), 0.5)
+  predictionList <- predict(cond_inf_forest, validationSet, OOB=TRUE, type = 'prob')
+  predictionY <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[2]))
 
+  show_cross_table_graph(validationSet, unlist(predictionY), 0.5)
 }
 
 
-show_cross_table_graph <- function(data, predict, threshold) {
+show_cross_table_graph <- function(actual, predicted, threshold) {
   print('Showing CrossTable graph')
+
+  print(length(predicted))
+
+  v <- rep(NA, length(predicted))
+  v <- ifelse(predicted >= threshold & actual$Survived == 1, "TP", v)
+  v <- ifelse(predicted >= threshold & actual$Survived == 0, "FP", v)
+  v <- ifelse(predicted < threshold & actual$Survived == 1, "FN", v)
+  v <- ifelse(predicted < threshold & actual$Survived == 0, "TN", v)
   
-  v <- rep(NA, length(predict))
-  v <- ifelse(predict >= threshold & data$Survived == 1, "TP", v)
-  v <- ifelse(predict >= threshold & data$Survived == 0, "FP", v)
-  v <- ifelse(predict < threshold & data$Survived == 1, "FN", v)
-  v <- ifelse(predict < threshold & data$Survived == 0, "TN", v)
-  
-  df <- data.frame(real=as.factor(data$Survived), prediction=predict)
+  df <- data.frame(real=as.factor(actual$Survived), prediction=predicted)
   df$pred_type <- v
   
   ggplot(data=df, aes(x=real, y=prediction)) +
@@ -451,11 +461,11 @@ predict_with_caret_svm <- function(train, test, formula, suffix) {
     preProc = c('center', 'scale'),
     tuneLength = 8,
     metric = 'ROC',
-    verbose = TRUE)
+    verbose = FALSE)
 
   print('Plotting model')
 #  trellis.par.set(caretTheme())
-#  plot(svmFit)
+  plot(svmFit)
 # TODO: make the graphs work!
 #  plot(svmFit, metric = 'ROC') # ERROR: not enough paramteters
 
@@ -474,13 +484,10 @@ predict_with_caret_svm <- function(train, test, formula, suffix) {
 #      # prevalence = 0.25 # fraction of positives agains
 
   print('Starting SVM prediction')
-  svm_prediction <- predict(svmFit, test, type = 'prob')
-  svm_prediction01 <- ifelse(svm_prediction$Y >= 0.5, 1, 0) # TODO play with this parameter.
-  svm_solution <- data.frame(PassengerId = test$PassengerId, Survived = svm_prediction01)
-
-  # Write your solution away to a csv file 
-  write.csv(svm_solution, file=paste0('titanic-svm-', suffix, '.csv'), row.names=FALSE, quote=FALSE)
-  return (svm_solution)
+  prediction <- predict(svmFit, test, type = 'prob')
+  prediction01 <- ifelse(prediction$Y >= 0.5, 1, 0)
+  write_solution(prediction01, 'svm', suffix, test$PassengerId)
+  return (prediction)
 }
 
 
@@ -500,9 +507,10 @@ predict_with_cv_gbm <- function(train, test, formula, suffix) {
 #  plot(gbmFit1)
 #  print(gbmFit1)
 
-  prediction <- predict(gbmFit1, newdata = test)
-  prediction01 <- ifelse(prediction == 'Y', 1, 0)
-  return (write_solution(prediction01, 'gbm', suffix, test$PassengerId))
+  prediction <- predict(gbmFit1, newdata = test, type = 'prob')
+  prediction01 <- ifelse(prediction$Y >= 0.5, 1, 0)
+  write_solution(prediction01, 'gbm', suffix, test$PassengerId)
+  return (prediction)
 }
 
 
@@ -515,6 +523,7 @@ predict_with_ensemble <- function(predictions, passengerIds) {
   write.csv(ensemble_solution, file='titanic-ensemble.csv', row.names=FALSE, quote=FALSE)
   return (ensemble_solution)
 }
+
 
 predict_survival =  function() {
   all_data <- prepare_data()
@@ -533,34 +542,34 @@ predict_survival =  function() {
   set.seed(111)
 
   formulaMotherRealFareSameTicket <-
-      as.factor(SurvivedYn) ~
+      SurvivedYn ~
           Pclass + Sex + Age + RealFare +
           Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
 
-#  predict_with_cv_gbm(train, test, formulaMotherRealFareSameTicket, '1')
+  predict_with_cv_gbm(train, test, formulaMotherRealFareSameTicket, '1')
 
   predict_with_caret_svm(train, test, formulaMotherRealFareSameTicket, '1')
 
   predict_with_logistic_regression(train, test)
 
-#  rf_base_solution <- predict_with_random_forest(train, test,
-#      as.factor(Survived) ~
-#                Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title,
-#      'base')
+  rf_base_solution <- predict_with_random_forest(train, test,
+      SurvivedYn ~
+          Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title,
+      'base')
 #
 #  rf_mother_solution <- predict_with_random_forest(train, test,
-#      as.factor(Survived) ~
-#                Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + Mother,
+#      SurvivedYn ~
+#          Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + Mother,
 #      'mother')
 
 #  rf_family_age_solution <- predict_with_random_forest(train, test,
-#      as.factor(Survived) ~
-#                Pclass + Sex + Age + AgeFactorChild +
-#                SibSp + Parch + RealFare + Embarked + Title + FamilySizeFactor + Mother,
+#      SurvivedYn ~
+#          Pclass + Sex + Age + AgeFactorChild +
+#          SibSp + Parch + RealFare + Embarked + Title + FamilySizeFactor + Mother,
 #      'familyfactor-mother')
 
   cif_base_solution <- predict_with_conditional_inference_forest(train, test,
-      as.factor(Survived) ~
+      SurvivedYn ~
           Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
       'base')
 
@@ -574,8 +583,10 @@ predict_survival =  function() {
 #          cifst = cif_mother_solution$Survived),
 #      test$PassengerId)
 
-  show_cross_table_graph_with_ci_forest(train, test, as.factor(Survived) ~
-      Pclass + Sex + Age + RealFare + Embarked + Title + WithSameTicket)
+  show_cross_table_graph_with_ci_forest(train, test,
+      SurvivedYn ~
+          Pclass + Sex + Age + RealFare + Embarked + Title + WithSameTicket,
+      'SameTicket')
 
   print('Done!')
 }
