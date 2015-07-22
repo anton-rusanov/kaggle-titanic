@@ -419,14 +419,15 @@ show_cross_table_graph_with_ci_forest <- function(train, test, formula, suffix) 
   predictionList <- predict(cond_inf_forest, validationSet, OOB=TRUE, type = 'prob')
   predictionY <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[2]))
 
-  show_cross_table_graph(validationSet, unlist(predictionY), 0.5)
+  show_cross_table_graph(validationSet, unlist(predictionY), 'CI', 0.5)
 }
 
 
-show_cross_table_graph <- function(actual, predicted, threshold) {
+show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
   print('Showing CrossTable graph')
 
-  print(length(predicted))
+  cat('Actual data sample [1:10]:', actual$SurvivedYn[1:10], '\n')
+  cat('Predicted sample [1:10]', predicted$SurvivedYn[1:10], '\n')
 
   v <- rep(NA, length(predicted))
   v <- ifelse(predicted >= threshold & actual$Survived == 1, "TP", v)
@@ -442,7 +443,25 @@ show_cross_table_graph <- function(actual, predicted, threshold) {
     geom_jitter(aes(color=pred_type), shape=1) +
     geom_hline(yintercept=threshold, color="red", alpha=0.6) +
     scale_color_discrete(name="type") +
-    labs(title=sprintf("Threshold at %.2f", threshold))
+    labs(title=sprintf("%s, threshold at %.2f", label, threshold))
+}
+
+
+show_cross_table_graph_generic <- function(
+    labeledDataSet, predictorFunction, formula, suffix, threshold = 0.5) {
+  cat('Starting cross-table graph for', suffix, '\n')
+  validationSetPosList <- createDataPartition(labeledDataSet$SurvivedYn, 0.1, list = TRUE)
+  # createDataPartition has list = FALSE leads to an error like 'too much data' during the list to
+  # matrix conversion. That's why the method returns a list, that we're converting on the next line.
+  validationSetPos <- matrix(unlist(validationSetPosList))
+  cat('validationSetPos[1:10]', validationSetPos[1:10], '\n')
+
+  validationSet <- labeledDataSet[validationSetPos, ]
+  trainingSet <- labeledDataSet[-validationSetPos]
+
+  # TODO: this only works with simple functions, but not with our complex predictors. :(
+  predicted <- predictorFunction(trainingSet, validationSet, formula, suffix)
+  show_cross_table_graph(validationSet, predicted, suffix, threshold)
 }
 
 
@@ -591,6 +610,26 @@ predict_survival =  function() {
   print('Done!')
 }
 
+
+show_all_cross_table_graphs <- function() {
+  all_data <- prepare_data()
+  training <- all_data[1:891,]
+
+  formula <-
+      SurvivedYn ~
+          Pclass + Sex + Age + RealFare +
+          Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
+
+  show_cross_table_graph_generic(
+      training, function(training, test, formula, suffix) {test}, formula, 'noop')
+
+
+  show_cross_table_graph_generic(
+      training, predict_with_conditional_inference_forest, formula, 'cif-graph')
+  show_cross_table_graph_generic(training, predict_predict_with_random_forest, formula, 'rf-graph')
+  show_cross_table_graph_generic(training, predict_with_caret_svm, formula, 'svm-graph')
+}
+
 #predict_survival()
 
 # TODO
@@ -605,6 +644,7 @@ predict_survival =  function() {
 #- Embarked is another important feature that dictates the survival of female??
 #- investigate caretEnsemble? Ada Boost?
 #- log(fare + 0.23)?
+#- Use PCA to reduce dimensions and get rid of multicollinearity
 
 #- Findings of exploratory analysis:
 #--- Pre-process and use cabin numbers: split series and fix bad ones, like F E46.
