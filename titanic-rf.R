@@ -106,7 +106,7 @@ extract_titles <- function(data) {
   title.comma.end <- title.dot.start + attr(title.dot.start, 'match.length') - 1
   data$Title <- substr(data$Name, title.dot.start + 2, title.comma.end - 1)
   return (data$Title)
-}   
+}
 
 
 ## Assigns a new title value to old title(s)
@@ -349,7 +349,7 @@ predict_with_predict_with_logistic_regression2 <- function(train, test) {
 
 
 ## Trains the Random Forest model and predicts 'Survived' for the test set.
-predict_with_random_forest <- function(train, test, formula, suffix) {
+predict_with_random_forest <- function(train, test, formula, suffix, threshold = 0.5) {
   print(paste('Starting RF model building', suffix))
 
   my_forest <- randomForest(
@@ -371,17 +371,18 @@ predict_with_random_forest <- function(train, test, formula, suffix) {
   # Make your prediction using the test set
   predictionMatrix <- predict(my_forest, test, type = 'prob')
   prediction <- as.data.frame(predictionMatrix)
-  prediction01 <- ifelse(prediction$Y >= 0.5, 1, 0)
+  prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
   write_solution(prediction01, 'rf', suffix, test$PassengerId)
   return (prediction)
 }
 
 
 ## Trains the Conditional Inference Forest model and predicts 'Survived' for the test set.
-predict_with_conditional_inference_forest <- function(train, test, formula, suffix) {
+predict_with_conditional_inference_forest <- function(
+    train, test, formula, suffix, threshold = 0.5) {
   print(paste('Starting CI model building', suffix))
   # TODO CI with and w/o WithSameTicket differ in 4 rows, but result in the same score.
-  # TODO Create an ensemble of those two + RF + LR + something else for odd count of voters!
+  # TODO Run cross-validation to figure the better model!
   cond_inf_forest <- cforest(
       formula,
       data = train,
@@ -399,78 +400,14 @@ predict_with_conditional_inference_forest <- function(train, test, formula, suff
   predictionN <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[1]))
   predictionY <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[2]))
   prediction <- data.frame(Y = predictionY, N = predictionN)
-  prediction01 <- ifelse(prediction$Y >= 0.5, 1, 0)
+  prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
   write_solution(prediction01, 'ci', suffix, test$PassengerId)
   return (prediction)
 }
 
 
-## Applies the Conditional Inference Forest Algorithm to show CrossTable graph
-show_cross_table_graph_with_ci_forest <- function(train, test, formula, suffix) {
-  print(paste('Starting CI model building (for CrossTable graph)', suffix))
- 
-  trainSet <- train[1:600,]
-  validationSet <- train[601:891,]
-  
-  cond_inf_forest <- cforest(
-    formula,
-    data = trainSet, controls=cforest_unbiased(ntree=1000, mtry=3))
-  
-  print('Starting CI prediction (for CrossTable graph)')
-  predictionList <- predict(cond_inf_forest, validationSet, OOB=TRUE, type = 'prob')
-  predictionY <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[2]))
-
-  show_cross_table_graph(validationSet, unlist(predictionY), 'CI', 0.5)
-}
-
-
-show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
-  print(paste('Showing CrossTable graph for', label))
-
-  print('Actual data sample [1:10]:')
-  print(actual[1:10, 'SurvivedYn'])
-
-  print('Predicted sample [1:10]:')
-  print(predicted[c(1:10), ])
-
-  v <- rep(NA, length(predicted))
-  v <- ifelse(predicted$Y >= threshold & actual$Survived == 1, "TP", v)
-  v <- ifelse(predicted$Y >= threshold & actual$Survived == 0, "FP", v)
-  v <- ifelse(predicted$Y < threshold & actual$Survived == 1, "FN", v)
-  v <- ifelse(predicted$Y < threshold & actual$Survived == 0, "TN", v)
-  
-  df <- data.frame(real=as.factor(actual$Survived), prediction=predicted$Y)
-  df$pred_type <- v
-  
-  ggplot(data=df, aes(x=real, y=prediction)) +
-    geom_violin(fill=rgb(1,1,1,alpha=0.6), color=NA) +
-    geom_jitter(aes(color=pred_type), shape=1) +
-    geom_hline(yintercept=threshold, color="red", alpha=0.6) +
-    scale_color_discrete(name="type") +
-    labs(title=sprintf("%s, threshold at %.2f", label, threshold))
-}
-
-
-show_cross_table_graph_generic <- function(
-    labeledDataSet, predictorFunction, formula, suffix, threshold = 0.5) {
-  cat('Starting cross-table graph for', suffix, '\n')
-  validationSetPosList <- createDataPartition(labeledDataSet$SurvivedYn, 0.1, list = TRUE)
-  # createDataPartition has list = FALSE leads to an error like 'too much data' during the list to
-  # matrix conversion. That's why the method returns a list, that we're converting on the next line.
-  validationSetPos <- matrix(unlist(validationSetPosList))
-  cat('validationSetPos[1:10]', validationSetPos[1:10], '\n')
-
-  validationSet <- labeledDataSet[validationSetPos, ]
-  trainingSet <- labeledDataSet[-validationSetPos, ]
-
-  # TODO: this only works with simple functions, but not with our complex predictors. :(
-  predicted <- predictorFunction(trainingSet, validationSet, formula, suffix)
-  show_cross_table_graph(validationSet, predicted, suffix, threshold)
-}
-
-
 ## Trains the Support Vector Machine model and predicts 'Survived' for the test set.
-predict_with_caret_svm <- function(train, test, formula, suffix) {
+predict_with_caret_svm <- function(train, test, formula, suffix, threshold = 0.5) {
   print(paste('Starting SVM model building', suffix))
   fitControl <- trainControl(method = 'repeatedcv',
       number = 10,
@@ -508,14 +445,14 @@ predict_with_caret_svm <- function(train, test, formula, suffix) {
 
   print('Starting SVM prediction')
   prediction <- predict(svmFit, test, type = 'prob')
-  prediction01 <- ifelse(prediction$Y >= 0.5, 1, 0)
+  prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
   write_solution(prediction01, 'svm', suffix, test$PassengerId)
   return (prediction)
 }
 
 
 ## Trains a Stochastic Gradient Boosting model and predicts 'Survived' for the test set.
-predict_with_cv_gbm <- function(train, test, formula, suffix) {
+predict_with_cv_gbm <- function(train, test, formula, suffix, threshold = 0.5) {
   print(paste('Starting GBM model building', suffix))
   fitControl <- trainControl(method = 'repeatedcv', number = 10, repeats = 10)
 
@@ -531,20 +468,9 @@ predict_with_cv_gbm <- function(train, test, formula, suffix) {
 #  print(gbmFit1)
 
   prediction <- predict(gbmFit1, newdata = test, type = 'prob')
-  prediction01 <- ifelse(prediction$Y >= 0.5, 1, 0)
+  prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
   write_solution(prediction01, 'gbm', suffix, test$PassengerId)
   return (prediction)
-}
-
-
-## Builds the ensemble solution.
-predict_with_ensemble <- function(predictions, passengerIds) {
-  print('Building ensemble solution')
-  # TODO Why round(..) returns (1 or 2) and not (0 or 1)?
-  ensemble_prediction <- round(rowMeans(predictions)) - 1
-  ensemble_solution <- data.frame(PassengerId = passengerIds, Survived = ensemble_prediction)
-  write.csv(ensemble_solution, file='titanic-ensemble.csv', row.names=FALSE, quote=FALSE)
-  return (ensemble_solution)
 }
 
 
@@ -569,16 +495,16 @@ predict_survival =  function() {
           Pclass + Sex + Age + RealFare +
           Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
 
-  predict_with_cv_gbm(train, test, formulaMotherRealFareSameTicket, '1')
+#  predict_with_cv_gbm(train, test, formulaMotherRealFareSameTicket, '1')
 
-  predict_with_caret_svm(train, test, formulaMotherRealFareSameTicket, '1')
+  predict_with_caret_svm(train, test, formulaMotherRealFareSameTicket, '1', 0.47)
 
   predict_with_logistic_regression(train, test)
 
   rf_base_solution <- predict_with_random_forest(train, test,
       SurvivedYn ~
           Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title,
-      'base')
+      'base', 0.47)
 #
 #  rf_mother_solution <- predict_with_random_forest(train, test,
 #      SurvivedYn ~
@@ -594,24 +520,57 @@ predict_survival =  function() {
   cif_base_solution <- predict_with_conditional_inference_forest(train, test,
       SurvivedYn ~
           Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
-      'base')
+      'base', 0.47)
 
   cif_mother_solution <- predict_with_conditional_inference_forest(train, test,
       formulaMotherRealFareSameTicket,
-      'mother')
-
-#  ensemble_solution <- predict_with_ensemble(
-#      cbind(rf = rf_mother_solution$Survived,
-#          cifb = cif_base_solution$Survived,
-#          cifst = cif_mother_solution$Survived),
-#      test$PassengerId)
-
-  show_cross_table_graph_with_ci_forest(train, test,
-      SurvivedYn ~
-          Pclass + Sex + Age + RealFare + Embarked + Title + WithSameTicket,
-      'SameTicket')
+      'mother', 0.47)
 
   print('Done!')
+}
+
+
+show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
+  print(paste('Showing CrossTable graph for', label))
+
+  print('Actual data sample [1:10]:')
+  print(actual[1:10, 'SurvivedYn'])
+
+  print('Predicted sample [1:10]:')
+  print(predicted[c(1:10), ])
+
+  v <- rep(NA, length(predicted))
+  v <- ifelse(predicted$Y >= threshold & actual$Survived == 1, "TP", v)
+  v <- ifelse(predicted$Y >= threshold & actual$Survived == 0, "FP", v)
+  v <- ifelse(predicted$Y < threshold & actual$Survived == 1, "FN", v)
+  v <- ifelse(predicted$Y < threshold & actual$Survived == 0, "TN", v)
+
+  df <- data.frame(real=as.factor(actual$Survived), prediction=predicted$Y)
+  df$pred_type <- v
+
+  ggplot(data=df, aes(x=real, y=prediction)) +
+    geom_violin(fill=rgb(1,1,1,alpha=0.6), color=NA) +
+    geom_jitter(aes(color=pred_type), shape=1) +
+    geom_hline(yintercept=threshold, color="red", alpha=0.6) +
+    scale_color_discrete(name="type") +
+    labs(title=sprintf("%s, threshold at %.2f", label, threshold))
+}
+
+
+show_cross_table_graph_generic <- function(
+    labeledDataSet, predictorFunction, formula, suffix, threshold = 0.5) {
+  cat('Starting cross-table graph for', suffix, '\n')
+  validationSetPosList <- createDataPartition(labeledDataSet$SurvivedYn, 0.1, list = TRUE)
+  # createDataPartition has list = FALSE leads to an error like 'too much data' during the list to
+  # matrix conversion. That's why the method returns a list, that we're converting on the next line.
+  validationSetPos <- matrix(unlist(validationSetPosList))
+  cat('validationSetPos[1:10]', validationSetPos[1:10], '\n')
+
+  validationSet <- labeledDataSet[validationSetPos, ]
+  trainingSet <- labeledDataSet[-validationSetPos, ]
+
+  predicted <- predictorFunction(trainingSet, validationSet, formula, suffix)
+  show_cross_table_graph(validationSet, predicted, suffix, threshold)
 }
 
 
