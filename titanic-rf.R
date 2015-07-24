@@ -3,6 +3,7 @@ library(caret)
 library(data.table)
 library(e1071)
 library(gbm)
+library(ggplot2)
 library(glmnet)
 library(kernlab)
 library(party)
@@ -424,18 +425,21 @@ show_cross_table_graph_with_ci_forest <- function(train, test, formula, suffix) 
 
 
 show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
-  print('Showing CrossTable graph')
+  print(paste('Showing CrossTable graph for', label))
 
-  cat('Actual data sample [1:10]:', actual$SurvivedYn[1:10], '\n')
-  cat('Predicted sample [1:10]', predicted$SurvivedYn[1:10], '\n')
+  print('Actual data sample [1:10]:')
+  print(actual[1:10, 'SurvivedYn'])
+
+  print('Predicted sample [1:10]:')
+  print(predicted[c(1:10), ])
 
   v <- rep(NA, length(predicted))
-  v <- ifelse(predicted >= threshold & actual$Survived == 1, "TP", v)
-  v <- ifelse(predicted >= threshold & actual$Survived == 0, "FP", v)
-  v <- ifelse(predicted < threshold & actual$Survived == 1, "FN", v)
-  v <- ifelse(predicted < threshold & actual$Survived == 0, "TN", v)
+  v <- ifelse(predicted$Y >= threshold & actual$Survived == 1, "TP", v)
+  v <- ifelse(predicted$Y >= threshold & actual$Survived == 0, "FP", v)
+  v <- ifelse(predicted$Y < threshold & actual$Survived == 1, "FN", v)
+  v <- ifelse(predicted$Y < threshold & actual$Survived == 0, "TN", v)
   
-  df <- data.frame(real=as.factor(actual$Survived), prediction=predicted)
+  df <- data.frame(real=as.factor(actual$Survived), prediction=predicted$Y)
   df$pred_type <- v
   
   ggplot(data=df, aes(x=real, y=prediction)) +
@@ -457,7 +461,7 @@ show_cross_table_graph_generic <- function(
   cat('validationSetPos[1:10]', validationSetPos[1:10], '\n')
 
   validationSet <- labeledDataSet[validationSetPos, ]
-  trainingSet <- labeledDataSet[-validationSetPos]
+  trainingSet <- labeledDataSet[-validationSetPos, ]
 
   # TODO: this only works with simple functions, but not with our complex predictors. :(
   predicted <- predictorFunction(trainingSet, validationSet, formula, suffix)
@@ -620,14 +624,15 @@ show_all_cross_table_graphs <- function() {
           Pclass + Sex + Age + RealFare +
           Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
 
-  show_cross_table_graph_generic(
-      training, function(training, test, formula, suffix) {test}, formula, 'noop')
-
-
-  show_cross_table_graph_generic(
+  graph1 <- show_cross_table_graph_generic(
       training, predict_with_conditional_inference_forest, formula, 'cif-graph')
-  show_cross_table_graph_generic(training, predict_predict_with_random_forest, formula, 'rf-graph')
-  show_cross_table_graph_generic(training, predict_with_caret_svm, formula, 'svm-graph')
+  graph2 <- show_cross_table_graph_generic(training, predict_with_random_forest, formula, 'rf-graph')
+  graph3 <- show_cross_table_graph_generic(training, predict_with_caret_svm, formula, 'svm-graph')
+
+  pushViewport(viewport(layout = grid.layout(1, 3)))
+  print(graph1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
+  print(graph2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+  print(graph3, vp = viewport(layout.pos.row = 1, layout.pos.col = 3))
 }
 
 #predict_survival()
@@ -645,6 +650,7 @@ show_all_cross_table_graphs <- function() {
 #- investigate caretEnsemble? Ada Boost?
 #- log(fare + 0.23)?
 #- Use PCA to reduce dimensions and get rid of multicollinearity
+#- Use ridge regression algorithm?
 
 #- Findings of exploratory analysis:
 #--- Pre-process and use cabin numbers: split series and fix bad ones, like F E46.
