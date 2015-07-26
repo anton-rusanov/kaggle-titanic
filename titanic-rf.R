@@ -14,7 +14,7 @@ library(rpart)
 library(stats)
 
 # Set seed for reproducibility
-set.seed(111)
+set.seed(887543)
 
 prepare_data <- function() {
   print('Started preparing data')
@@ -537,10 +537,10 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
   print(predicted[c(1:10), ])
 
   v <- rep(NA, length(predicted))
-  v <- ifelse(predicted$Y >= threshold & actual$Survived == 1, "TP", v)
-  v <- ifelse(predicted$Y >= threshold & actual$Survived == 0, "FP", v)
-  v <- ifelse(predicted$Y < threshold & actual$Survived == 1, "FN", v)
-  v <- ifelse(predicted$Y < threshold & actual$Survived == 0, "TN", v)
+  v <- ifelse(predicted$Y >= threshold & actual$Survived == 1, 'TP', v)
+  v <- ifelse(predicted$Y >= threshold & actual$Survived == 0, 'FP', v)
+  v <- ifelse(predicted$Y < threshold & actual$Survived == 1, 'FN', v)
+  v <- ifelse(predicted$Y < threshold & actual$Survived == 0, 'TN', v)
 
   df <- data.frame(real=as.factor(actual$Survived), prediction=predicted$Y)
   df$pred_type <- v
@@ -548,9 +548,10 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
   ggplot(data=df, aes(x=real, y=prediction)) +
     geom_violin(fill=rgb(1,1,1,alpha=0.6), color=NA) +
     geom_jitter(aes(color=pred_type), shape=1) +
-    geom_hline(yintercept=threshold, color="red", alpha=0.6) +
-    scale_color_discrete(name="type") +
-    labs(title=sprintf("%s, threshold at %.2f", label, threshold))
+    geom_hline(yintercept=threshold, color='red', alpha=0.6) +
+    scale_color_discrete(name='type', guide=FALSE) +
+    labs(title=sprintf('%s, threshold at %.2f', label, threshold)) +
+    ylim(c(-0.01,1.01))
 }
 
 
