@@ -13,7 +13,8 @@ library(randomForest)
 library(rpart)
 library(stats)
 
-
+# Set seed for reproducibility
+set.seed(111)
 
 prepare_data <- function() {
   print('Started preparing data')
@@ -456,7 +457,6 @@ predict_with_cv_gbm <- function(train, test, formula, suffix, threshold = 0.5) {
   print(paste('Starting GBM model building', suffix))
   fitControl <- trainControl(method = 'repeatedcv', number = 10, repeats = 10)
 
-#  set.seed(825)
   gbmFit1 <- train(formula, data = train,
     method = 'gbm',
     trControl = fitControl,
@@ -487,9 +487,6 @@ predict_survival =  function() {
   #print(summary(train))
   #mosaicplot(train$FamilySize ~ train$Survived, xlab='FamilySize', ylab='Survived')
   
-  # Set seed for reproducibility
-  set.seed(111)
-
   formulaMotherRealFareSameTicket <-
       SurvivedYn ~
           Pclass + Sex + Age + RealFare +
@@ -497,14 +494,14 @@ predict_survival =  function() {
 
 #  predict_with_cv_gbm(train, test, formulaMotherRealFareSameTicket, '1')
 
-  predict_with_caret_svm(train, test, formulaMotherRealFareSameTicket, '1', 0.47)
+  predict_with_caret_svm(train, test, formulaMotherRealFareSameTicket, '1', 0.5)
 
   predict_with_logistic_regression(train, test)
 
   rf_base_solution <- predict_with_random_forest(train, test,
       SurvivedYn ~
           Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title,
-      'base', 0.47)
+      'base', 0.5)
 #
 #  rf_mother_solution <- predict_with_random_forest(train, test,
 #      SurvivedYn ~
@@ -520,11 +517,11 @@ predict_survival =  function() {
   cif_base_solution <- predict_with_conditional_inference_forest(train, test,
       SurvivedYn ~
           Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
-      'base', 0.47)
+      'base', 0.5)
 
   cif_mother_solution <- predict_with_conditional_inference_forest(train, test,
       formulaMotherRealFareSameTicket,
-      'mother', 0.47)
+      'mother', 0.5)
 
   print('Done!')
 }
@@ -557,20 +554,28 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
 }
 
 
-show_cross_table_graph_generic <- function(
-    labeledDataSet, predictorFunction, formula, suffix, threshold = 0.5) {
-  cat('Starting cross-table graph for', suffix, '\n')
+## Creates data partition of given labeled dataset into training and validation sets and returns it
+## as a list with entry names 'trainingSet' and 'validationSet'.
+partition_labeled_dataset <- function(labeledDataSet) {
+  print('Starting partitioning dataset')
   validationSetPosList <- createDataPartition(labeledDataSet$SurvivedYn, 0.1, list = TRUE)
   # createDataPartition has list = FALSE leads to an error like 'too much data' during the list to
   # matrix conversion. That's why the method returns a list, that we're converting on the next line.
   validationSetPos <- matrix(unlist(validationSetPosList))
-  cat('validationSetPos[1:10]', validationSetPos[1:10], '\n')
+  print('validationSetPos[1:10]')
+  print(validationSetPos[1:10])
 
   validationSet <- labeledDataSet[validationSetPos, ]
   trainingSet <- labeledDataSet[-validationSetPos, ]
 
-  predicted <- predictorFunction(trainingSet, validationSet, formula, suffix)
-  show_cross_table_graph(validationSet, predicted, suffix, threshold)
+  list(trainingSet = trainingSet, validationSet = validationSet)
+}
+
+
+show_cross_table_graph_generic <- function(
+    partition, predictorFunction, formula, suffix, threshold = 0.5) {
+  predicted <- predictorFunction(partition$trainingSet, partition$validationSet, formula, suffix)
+  show_cross_table_graph(partition$validationSet, predicted, suffix, threshold)
 }
 
 
@@ -583,15 +588,19 @@ show_all_cross_table_graphs <- function() {
           Pclass + Sex + Age + RealFare +
           Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
 
-  graph1 <- show_cross_table_graph_generic(
-      training, predict_with_conditional_inference_forest, formula, 'cif-graph')
-  graph2 <- show_cross_table_graph_generic(training, predict_with_random_forest, formula, 'rf-graph')
-  graph3 <- show_cross_table_graph_generic(training, predict_with_caret_svm, formula, 'svm-graph')
+  partition <- partition_labeled_dataset(training)
+
+  graphCif <- show_cross_table_graph_generic(
+      partition, predict_with_conditional_inference_forest, formula, 'cif-graph')
+  graphRf <- show_cross_table_graph_generic(
+      partition, predict_with_random_forest, formula, 'rf-graph')
+  graphSvm <- show_cross_table_graph_generic(partition, predict_with_caret_svm, formula, 'svm-graph')
 
   pushViewport(viewport(layout = grid.layout(1, 3)))
-  print(graph1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-  print(graph2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
-  print(graph3, vp = viewport(layout.pos.row = 1, layout.pos.col = 3))
+  print(graphCif, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
+  print(graphRf, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+  print(graphSvm, vp = viewport(layout.pos.row = 1, layout.pos.col = 3))
+  print('Done!')
 }
 
 #predict_survival()
