@@ -5,11 +5,13 @@ library(e1071)
 library(gbm)
 library(ggplot2)
 library(glmnet)
+library(gplots)
 library(kernlab)
 library(party)
 library(plyr)
 library(pROC)
 library(randomForest)
+library(ROCR)
 library(rpart)
 library(stats)
 
@@ -338,8 +340,8 @@ predict_with_predict_with_logistic_regression2 <- function(train, test) {
             Pclass + I(Pclass^3) + Title + I(FamilySize^2),
         family = binomial,
         data = train)
-    train.glm$xlevels[["Title"]] <- union(train.glm$xlevels[["y"]], levels(train$Title))
-    glm.pred <- predict.glm(train.glm, newdata = test, type = "response")
+    train.glm$xlevels[['Title']] <- union(train.glm$xlevels[['y']], levels(train$Title))
+    glm.pred <- predict.glm(train.glm, newdata = test, type = 'response')
     survival.glm = ifelse(glm.pred > 0.5, 1, 0)
     actual <- test$Survived
     kappa <- kappa2(data.frame(actual, survival.glm))$value
@@ -432,7 +434,7 @@ predict_with_caret_svm <- function(train, test, formula, suffix, threshold = 0.5
 
 # ERROR:  undefined columns selected
 #  plot(svmFit,
-#      metric = 'Kappa',  # Only "Accuracy" or "Kappa" for classification
+#      metric = 'Kappa',  # Only 'Accuracy' or 'Kappa' for classification
 #      plotType = 'line', # scatter, level, line
 #      #digits:
 #      output = 'layered' # data, ggplot, layered
@@ -559,7 +561,7 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
 ## as a list with entry names 'trainingSet' and 'validationSet'.
 partition_labeled_dataset <- function(labeledDataSet) {
   print('Starting partitioning dataset')
-  validationSetPosList <- createDataPartition(labeledDataSet$SurvivedYn, 0.1, list = TRUE)
+  validationSetPosList <- createDataPartition(labeledDataSet$SurvivedYn, 0.15, list = TRUE)
   # createDataPartition has list = FALSE leads to an error like 'too much data' during the list to
   # matrix conversion. That's why the method returns a list, that we're converting on the next line.
   validationSetPos <- matrix(unlist(validationSetPosList))
@@ -573,9 +575,35 @@ partition_labeled_dataset <- function(labeledDataSet) {
 }
 
 
-show_cross_table_graph_generic <- function(
+show_model_performance <- function(
     partition, predictorFunction, formula, suffix, threshold = 0.5) {
-  predicted <- predictorFunction(partition$trainingSet, partition$validationSet, formula, suffix)
+  predicted <- predictorFunction(
+      partition$trainingSet, partition$validationSet, formula, suffix, threshold)
+
+  print('Plotting performance graphs')
+  # TODO Plot graphs more compactly, so that they can be compared.
+  actual <- partition$validationSet$Survived
+  print(predicted$Y[1:10])
+  print(actual[1:10])
+  pred <- prediction(predicted$Y, actual);
+
+  # Recall-Precision curve
+  recallPrecisionPerf <- performance(pred, 'prec', 'rec')
+  plot(recallPrecisionPerf)
+
+  # ROC curve
+  rocPerf <- performance(pred, 'tpr', 'fpr')
+  plot(rocPerf)
+
+  # ROC area under the curve
+  aucPerf <- performance(pred, 'auc')
+  auc <- as.numeric(aucPerf@y.values)
+  print(paste('AUC:', auc))
+
+  # F1 score
+  f1Perf <- performance(pred, 'f')
+  plot(f1Perf)
+
   show_cross_table_graph(partition$validationSet, predicted, suffix, threshold)
 }
 
@@ -591,11 +619,11 @@ show_all_cross_table_graphs <- function() {
 
   partition <- partition_labeled_dataset(training)
 
-  graphCif <- show_cross_table_graph_generic(
+  graphCif <- show_model_performance(
       partition, predict_with_conditional_inference_forest, formula, 'cif-graph')
-  graphRf <- show_cross_table_graph_generic(
+  graphRf <- show_model_performance(
       partition, predict_with_random_forest, formula, 'rf-graph')
-  graphSvm <- show_cross_table_graph_generic(partition, predict_with_caret_svm, formula, 'svm-graph')
+  graphSvm <- show_model_performance(partition, predict_with_caret_svm, formula, 'svm-graph')
 
   pushViewport(viewport(layout = grid.layout(1, 3)))
   print(graphCif, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
