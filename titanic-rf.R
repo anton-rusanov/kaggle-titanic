@@ -422,15 +422,9 @@ predict_with_caret_svm <- function(train, test, formula, suffix, threshold = 0.5
     method = 'svmRadial',
     trControl = fitControl,
     preProc = c('center', 'scale'),
-    tuneLength = 8,
+    tuneLength = 8, # TODO: set 16
     metric = 'ROC',
     verbose = FALSE)
-
-  print('Plotting model')
-#  trellis.par.set(caretTheme())
-  plot(svmFit)
-# TODO: make the graphs work!
-#  plot(svmFit, metric = 'ROC') # ERROR: not enough paramteters
 
 # ERROR:  undefined columns selected
 #  plot(svmFit,
@@ -459,17 +453,16 @@ predict_with_cv_gbm <- function(train, test, formula, suffix, threshold = 0.5) {
   print(paste('Starting GBM model building', suffix))
   fitControl <- trainControl(method = 'repeatedcv', number = 10, repeats = 10)
 
-  gbmFit1 <- train(formula, data = train,
+  gbmFit <- train(formula, data = train,
     method = 'gbm',
     trControl = fitControl,
     ## This last option is actually one
     ## for gbm() that passes through
     verbose = FALSE)
-#  trellis.par.set(caretTheme())
-#  plot(gbmFit1)
-#  print(gbmFit1)
+#  print(gbmFit)
+  print(summary(gbmFit))
 
-  prediction <- predict(gbmFit1, newdata = test, type = 'prob')
+  prediction <- predict(gbmFit, newdata = test, type = 'prob')
   prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
   write_solution(prediction01, 'gbm', suffix, test$PassengerId)
   return (prediction)
@@ -604,6 +597,11 @@ show_model_performance <- function(
   f1Perf <- performance(pred, 'f')
   plot(f1Perf)
 
+  # RMSE
+  actual <- as.numeric(partition$validationSet$Survived)
+  rmse <- sqrt(mean((actual - predicted$Y)^2))
+  print(paste('RMSE:', rmse))
+
   show_cross_table_graph(partition$validationSet, predicted, suffix, threshold)
 }
 
@@ -619,15 +617,15 @@ show_all_cross_table_graphs <- function() {
 
   partition <- partition_labeled_dataset(training)
 
-  graphCif <- show_model_performance(
-      partition, predict_with_conditional_inference_forest, formula, 'cif-graph')
   graphRf <- show_model_performance(
       partition, predict_with_random_forest, formula, 'rf-graph')
+  graphCif <- show_model_performance(
+      partition, predict_with_conditional_inference_forest, formula, 'cif-graph')
   graphSvm <- show_model_performance(partition, predict_with_caret_svm, formula, 'svm-graph')
 
   pushViewport(viewport(layout = grid.layout(1, 3)))
-  print(graphCif, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-  print(graphRf, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+  print(graphRf, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
+  print(graphCif, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
   print(graphSvm, vp = viewport(layout.pos.row = 1, layout.pos.col = 3))
   print('Done!')
 }
@@ -648,6 +646,7 @@ show_all_cross_table_graphs <- function() {
 #- log(fare + 0.23)?
 #- Use PCA to reduce dimensions and get rid of multicollinearity
 #- Use ridge regression algorithm?
+#- results <- resamples(list(LVQ=modelLvq, GBM=modelGbm, SVM=modelSvm))
 
 #- Findings of exploratory analysis:
 #--- Pre-process and use cabin numbers: split series and fix bad ones, like F E46.
