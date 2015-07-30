@@ -349,7 +349,7 @@ predict_with_predict_with_logistic_regression2 <- function(train, test) {
 
 ## Trains the Random Forest model and predicts 'Survived' for the test set.
 predict_with_random_forest <- function(train, test, formula, suffix, threshold = 0.5) {
-  print(paste('Starting RF model building', suffix))
+  print(paste('Starting building model RF -', suffix))
 
   my_forest <- randomForest(
       formula,
@@ -379,7 +379,7 @@ predict_with_random_forest <- function(train, test, formula, suffix, threshold =
 ## Trains the Conditional Inference Forest model and predicts 'Survived' for the test set.
 predict_with_conditional_inference_forest <-
     function(train, test, formula, suffix, threshold = 0.5) {
-  print(paste('Starting CI model building', suffix))
+  print(paste('Starting building model CI -', suffix))
   # TODO CI with and w/o WithSameTicket differ in 4 rows, but result in the same score.
   # TODO Run cross-validation to figure the better model!
   cond_inf_forest <- cforest(
@@ -407,15 +407,26 @@ predict_with_conditional_inference_forest <-
 
 ## Trains the Support Vector Machine model and predicts 'Survived' for the test set.
 predict_with_caret_svm <- function(train, test, formula, suffix, threshold = 0.5) {
-  print(paste('Starting SVM model building', suffix))
+  predict_with_caret('svmRadial', train, test, formula, suffix, threshold)
+}
+
+
+## Trains a Stochastic Gradient Boosting model and predicts 'Survived' for the test set.
+predict_with_caret_gbm2 <- function(train, test, formula, suffix, threshold = 0.5) {
+  predict_with_caret('gbm', train, test, formula, suffix, threshold)
+}
+
+
+predict_with_caret <- function(method, train, test, formula, suffix, threshold = 0.5) {
+  print(paste('Starting building model', method, '-', suffix))
   fitControl <- trainControl(method = 'repeatedcv',
       number = 10,
       repeats = 3, # TODO Set 10
       classProbs = TRUE,
       summaryFunction = twoClassSummary)
 
-  svmFit <- train(formula, data = train,
-    method = 'svmRadial',
+  fit <- train(formula, data = train,
+    method = method,
     trControl = fitControl,
     preProc = c('center', 'scale'),
     tuneLength = 8, # TODO: set 16
@@ -423,7 +434,7 @@ predict_with_caret_svm <- function(train, test, formula, suffix, threshold = 0.5
     verbose = FALSE)
 
 # ERROR:  undefined columns selected
-#  plot(svmFit,
+#  plot(fit,
 #      metric = 'Kappa',  # Only 'Accuracy' or 'Kappa' for classification
 #      plotType = 'line', # scatter, level, line
 #      #digits:
@@ -431,36 +442,15 @@ predict_with_caret_svm <- function(train, test, formula, suffix, threshold = 0.5
 #  )
 
   #TODO: need splitted data to check!
-#  confusionMatrix(svmFit,
+#  confusionMatrix(fit,
 #      train,
 #      positive = 'Y')
 #      # prevalence = 0.25 # fraction of positives agains
 
-  print('Starting SVM prediction')
-  prediction <- predict(svmFit, test, type = 'prob')
+  print(paste('Starting prediction for ', method, '-', suffix))
+  prediction <- predict(fit, test, type = 'prob')
   prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
-  write_solution(prediction01, 'svm', suffix, test$PassengerId)
-  return (prediction)
-}
-
-
-## Trains a Stochastic Gradient Boosting model and predicts 'Survived' for the test set.
-predict_with_cv_gbm <- function(train, test, formula, suffix, threshold = 0.5) {
-  print(paste('Starting GBM model building', suffix))
-  fitControl <- trainControl(method = 'repeatedcv', number = 10, repeats = 10)
-
-  gbmFit <- train(formula, data = train,
-    method = 'gbm',
-    trControl = fitControl,
-    ## This last option is actually one
-    ## for gbm() that passes through
-    verbose = FALSE)
-#  print(gbmFit)
-  print(summary(gbmFit))
-
-  prediction <- predict(gbmFit, newdata = test, type = 'prob')
-  prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
-  write_solution(prediction01, 'gbm', suffix, test$PassengerId)
+  write_solution(prediction01, method, suffix, test$PassengerId)
   return (prediction)
 }
 
@@ -472,46 +462,24 @@ predict_survival =  function() {
   train <- all_data[1:891,]
   test <- all_data[892:1309,]
   
-  # Dataset summaries and plots
-  #print(summary(all_data))
-  #print('')
-  #print(summary(train))
-  #mosaicplot(train$FamilySize ~ train$Survived, xlab='FamilySize', ylab='Survived')
-  
-  formulaMotherRealFareSameTicket <-
-      SurvivedYn ~
-          Pclass + Sex + Age + RealFare +
-          Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
+  predict_with_cv_gbm2(train, test, formulaMotherRealFareSameTicket(), '1')
 
-#  predict_with_cv_gbm(train, test, formulaMotherRealFareSameTicket, '1')
+  predict_with_caret_svm(train, test, formulaMotherRealFareSameTicket(), '1', 0.5)
 
-  predict_with_caret_svm(train, test, formulaMotherRealFareSameTicket, '1', 0.5)
+  predict_with_caret_svm(train, test, formulaScaledMotherRealFareSameTicket(), 'scaled', 0.5)
 
   predict_with_logistic_regression(train, test)
 
   rf_base_solution <- predict_with_random_forest(train, test,
-      SurvivedYn ~
-          Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title,
+      formulaFamilySizeFactor(),
       'base', 0.5)
-#
-#  rf_mother_solution <- predict_with_random_forest(train, test,
-#      SurvivedYn ~
-#          Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + Mother,
-#      'mother')
-
-#  rf_family_age_solution <- predict_with_random_forest(train, test,
-#      SurvivedYn ~
-#          Pclass + Sex + Age + AgeFactorChild +
-#          SibSp + Parch + RealFare + Embarked + Title + FamilySizeFactor + Mother,
-#      'familyfactor-mother')
 
   cif_base_solution <- predict_with_conditional_inference_forest(train, test,
-      SurvivedYn ~
-          Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor,
+      formulaFamilySizeFactor(),
       'base', 0.5)
 
   cif_mother_solution <- predict_with_conditional_inference_forest(train, test,
-      formulaMotherRealFareSameTicket,
+      formulaMotherRealFareSameTicket(),
       'mother', 0.5)
 
   print('Done!')
@@ -538,7 +506,7 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
     geom_jitter(aes(color=pred_type), shape=1) +
     geom_hline(yintercept=threshold, color='red', alpha=0.6) +
     scale_color_discrete(name='type', guide=FALSE) +
-    ggtitle(sprintf('%s, threshold at %.2f,\n FP=%d, FN=%d', label, threshold, fp, fn)) +
+    ggtitle(sprintf('%s,\n FP=%d, FN=%d', label, fp, fn)) +
     ylim(c(-0.01,1.01))
 }
 
@@ -599,25 +567,72 @@ show_all_cross_table_graphs <- function() {
   all_data <- prepare_data()
   training <- all_data[1:891,]
 
-  formula <-
-      SurvivedYn ~
-          Pclass + Sex + Age + RealFare +
-          Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
-
   partition <- partition_labeled_dataset(training)
 
-  graphRf <- show_model_performance(
-      partition, predict_with_random_forest, formula, 'rf-graph')
-  graphCif <- show_model_performance(
-      partition, predict_with_conditional_inference_forest, formula, 'cif-graph')
-  graphSvm <- show_model_performance(partition, predict_with_caret_svm, formula, 'svm-graph')
+  setClass('Model', slots = list(
+      name='character',
+      method = 'function',
+      formula = 'formula'))
 
-  pushViewport(viewport(layout = grid.layout(1, 3)))
-  print(graphRf, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-  print(graphCif, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
-  print(graphSvm, vp = viewport(layout.pos.row = 1, layout.pos.col = 3))
+  models <- c(
+      new('Model', name = 'rf-mother',
+          method = predict_with_random_forest,
+          formula = formulaMotherRealFareSameTicket()),
+
+      new('Model', name = 'cif-mother',
+          method = predict_with_conditional_inference_forest,
+          formula = formulaMotherRealFareSameTicket()),
+
+      new('Model', name = 'cif-scaled-mother',
+          method = predict_with_conditional_inference_forest,
+          formula = formulaScaledMotherRealFareSameTicket()),
+
+#      new('Model', name = 'svm-mother',
+#          method = predict_with_caret_svm,
+#          formula = formulaMotherRealFareSameTicket()),
+#
+      new('Model', name = 'gbm-mother',
+          method = predict_with_caret_gbm2,
+          formula = formulaScaledMotherRealFareSameTicket()),
+
+      new('Model', name = 'svm-scaled-mother',
+          method = predict_with_caret_svm,
+          formula = formulaScaledMotherRealFareSameTicket())
+  )
+
+  graphs <- lapply(models, function(model) {
+    show_model_performance(partition, model@method, model@formula, paste0(model@name, '-graph'))
+  })
+
+  pushViewport(viewport(layout = grid.layout(1, length(graphs))))
+
+  for (i in 1:length(graphs)) {
+    print(graphs[[i]], vp = viewport(layout.pos.row = 1, layout.pos.col = i))
+  }
+
   print('Done!')
 }
+
+
+formulaScaledMotherRealFareSameTicket <- function() {
+  SurvivedYn ~
+      Pclass + Sex + AgeScaled + RealFareScaled +
+      Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
+}
+
+
+formulaMotherRealFareSameTicket <- function() {
+  SurvivedYn ~
+      Pclass + Sex + Age + RealFare +
+      Embarked + Title + FamilySizeFactor + WithSameTicket + Mother
+}
+
+
+formulaFamilySizeFactor <- function() {
+  SurvivedYn ~
+      Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor
+}
+
 
 #predict_survival()
 
