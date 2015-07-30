@@ -573,11 +573,11 @@ show_model_performance <-
 
   # Recall-Precision curve
   recallPrecisionPerf <- performance(pred, 'prec', 'rec')
-  plot(recallPrecisionPerf)
+  plot(recallPrecisionPerf, main = suffix)
 
   # ROC curve
   rocPerf <- performance(pred, 'tpr', 'fpr')
-  plot(rocPerf)
+  plot(rocPerf, main = suffix)
 
   # ROC area under the curve
   auc <- performance(pred, 'auc')@y.values
@@ -585,7 +585,7 @@ show_model_performance <-
 
   # F1 score
   f1Perf <- performance(pred, 'f')
-  plot(f1Perf)
+  plot(f1Perf, main = suffix)
 
   # RMSE
   rmse <- performance(pred, 'rmse')@y.values
