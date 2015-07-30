@@ -1,6 +1,5 @@
 library(Amelia)
 library(caret)
-library(data.table)
 library(e1071)
 library(gbm)
 library(ggplot2)
@@ -197,13 +196,10 @@ create_family_id <- function(data) {
 
 ## Counts people who have the same ticket number.
 # TODO: Combine this with the family size?
-# TODO: Use data.table instead of data.frame everywhere?
 # TODO: This could work the other way: AdultsOnTicket = TicketFare/Fare(Pclass)
 count_people_with_same_ticket <- function(data) {
   print('Adding WithSameTicket')
-  dt <- data.table(data)
-  dt[, WithSameTicket := length(unique(PassengerId)), by=Ticket]
-  return (dt$WithSameTicket)
+  ave(data$PassengerId, data[, 'Ticket'], FUN=length)
 }
 
 
@@ -381,8 +377,8 @@ predict_with_random_forest <- function(train, test, formula, suffix, threshold =
 
 
 ## Trains the Conditional Inference Forest model and predicts 'Survived' for the test set.
-predict_with_conditional_inference_forest <- function(
-    train, test, formula, suffix, threshold = 0.5) {
+predict_with_conditional_inference_forest <-
+    function(train, test, formula, suffix, threshold = 0.5) {
   print(paste('Starting CI model building', suffix))
   # TODO CI with and w/o WithSameTicket differ in 4 rows, but result in the same score.
   # TODO Run cross-validation to figure the better model!
@@ -525,12 +521,6 @@ predict_survival =  function() {
 show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
   print(paste('Showing CrossTable graph for', label))
 
-  print('Actual data sample [1:10]:')
-  print(actual[1:10, 'SurvivedYn'])
-
-  print('Predicted sample [1:10]:')
-  print(predicted[c(1:10), ])
-
   v <- rep(NA, length(predicted))
   v <- ifelse(predicted$Y >= threshold & actual$Survived == 1, 'TP', v)
   v <- ifelse(predicted$Y >= threshold & actual$Survived == 0, 'FP', v)
@@ -540,12 +530,15 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
   df <- data.frame(real=as.factor(actual$Survived), prediction=predicted$Y)
   df$pred_type <- v
 
+  fp <- nrow(df[which(df$pred_type == 'FP'),])
+  fn <- nrow(df[which(df$pred_type == 'FN'),])
+
   ggplot(data=df, aes(x=real, y=prediction)) +
     geom_violin(fill=rgb(1,1,1,alpha=0.6), color=NA) +
     geom_jitter(aes(color=pred_type), shape=1) +
     geom_hline(yintercept=threshold, color='red', alpha=0.6) +
     scale_color_discrete(name='type', guide=FALSE) +
-    labs(title=sprintf('%s, threshold at %.2f', label, threshold)) +
+    ggtitle(sprintf('%s, threshold at %.2f,\n FP=%d, FN=%d', label, threshold, fp, fn)) +
     ylim(c(-0.01,1.01))
 }
 
@@ -568,16 +561,14 @@ partition_labeled_dataset <- function(labeledDataSet) {
 }
 
 
-show_model_performance <- function(
-    partition, predictorFunction, formula, suffix, threshold = 0.5) {
+show_model_performance <-
+    function(partition, predictorFunction, formula, suffix, threshold = 0.5) {
   predicted <- predictorFunction(
       partition$trainingSet, partition$validationSet, formula, suffix, threshold)
 
   print('Plotting performance graphs')
   # TODO Plot graphs more compactly, so that they can be compared.
   actual <- partition$validationSet$Survived
-  print(predicted$Y[1:10])
-  print(actual[1:10])
   pred <- prediction(predicted$Y, actual);
 
   # Recall-Precision curve
@@ -589,8 +580,7 @@ show_model_performance <- function(
   plot(rocPerf)
 
   # ROC area under the curve
-  aucPerf <- performance(pred, 'auc')
-  auc <- as.numeric(aucPerf@y.values)
+  auc <- performance(pred, 'auc')@y.values
   print(paste('AUC:', auc))
 
   # F1 score
@@ -598,8 +588,7 @@ show_model_performance <- function(
   plot(f1Perf)
 
   # RMSE
-  actual <- as.numeric(partition$validationSet$Survived)
-  rmse <- sqrt(mean((actual - predicted$Y)^2))
+  rmse <- performance(pred, 'rmse')@y.values
   print(paste('RMSE:', rmse))
 
   show_cross_table_graph(partition$validationSet, predicted, suffix, threshold)
