@@ -15,7 +15,7 @@ library(rpart)
 library(stats)
 
 # Set seed for reproducibility
-set.seed(887543)
+set.seed(85431)
 
 prepare_data <- function() {
   print('Started preparing data')
@@ -452,6 +452,89 @@ predict_with_caret <- function(method, train, test, formula, suffix, threshold =
   prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
   write_solution(prediction01, method, suffix, test$PassengerId)
   return (prediction)
+}
+
+
+cross_validate <- function(partition, formula) {
+  parameters <- data.frame(parameter = c('C', 'sigma'),
+      class = rep('numeric', 2),
+      label = c('Cost', 'Sigma'))
+
+  grid <- function(x, y, len = NULL) {
+    library(kernlab)
+    ## This produces low, middle and high values for sigma
+    ## (i.e. a vector with 3 elements).
+    sigmas <- sigest(as.matrix(x), na.action = na.omit, scaled = TRUE)
+    expand.grid(sigma = mean(sigmas[-2]),
+        C = 2 ^((1:len) - 3)
+    )
+  }
+
+  fit <- function(x, y, wts, param, lev, last, weights, classProbs, ...) {
+    ksvm(x = as.matrix(x), y = y,
+      kernel = rbfdot,
+      kpar = list(sigma = param$sigma),
+      C = param$C,
+      ...)
+  }
+
+  pred <- function(modelFit, newdata, preProc = NULL, submodels = NULL) {
+    predict(modelFit, newdata)
+  }
+
+  prob <- function(modelFit, newdata, preProc = NULL, submodels = NULL) {
+    predict(modelFit, newdata, type='prob')
+  }
+
+  sortingFunc <- function(x) {
+    x[order(x$C),]
+  }
+
+  # We are lucky that kernlab has this class level extraction function implemented for us.
+  # party:::ctree would have to use: function(x) levels(x@data@get('response')[,1])
+  levelsFunc <- function(x) lev(x)
+
+  modelComponents <- list(
+      type = 'Classification', # TODO: c('Classification', 'Regression')
+      library = 'kernlab',
+      loop = NULL,
+      parameters = parameters,
+      grid = grid,
+      fit = fit,
+      predict = pred,
+      prob = prob,
+      sort = sortingFunc,
+      levels = levelsFunc # only used for classification models using S4 methods
+  )
+
+  fitControl <- trainControl(method = 'repeatedcv',
+       ## 10-fold CV...
+       number = 10,
+       ## repeated ten times
+       repeats = 10, # TODO: 10!
+       classProbs = TRUE,
+       verbose = TRUE)
+
+  set.seed(825)
+  Laplacian <- train(formula, data = partition$trainingSet,
+                     method = modelComponents,
+                     preProc = c('center', 'scale'),
+                     tuneLength = 8,
+                     trControl = fitControl,
+                     prob.model = TRUE)
+  print(Laplacian, digits = 3)
+
+  plot(Laplacian,  scales = list(x = list(log = 2)))
+
+  show_model_performance(partition,
+      function(trainIgnored, test, formulaIgnored, suffixIgnored, thresholdIgnored) {
+        predict(Laplacian, test, type='prob')
+      },
+      formula,
+      'SVM with Laplacian',
+      0.5)
+
+  return (Laplacian)
 }
 
 
