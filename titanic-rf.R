@@ -515,15 +515,11 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
 ## as a list with entry names 'trainingSet' and 'validationSet'.
 partition_labeled_dataset <- function(labeledDataSet) {
   print('Starting partitioning dataset')
-  validationSetPosList <- createDataPartition(labeledDataSet$SurvivedYn, 0.15, list = TRUE)
-  # createDataPartition has list = FALSE leads to an error like 'too much data' during the list to
-  # matrix conversion. That's why the method returns a list, that we're converting on the next line.
-  validationSetPos <- matrix(unlist(validationSetPosList))
-  print('validationSetPos[1:10]')
-  print(validationSetPos[1:10])
+  inTrainingSet <- createDataPartition(labeledDataSet$SurvivedYn, p = 0.85, list = FALSE)
+  print(paste('Training set size:', length(inTrainingSet)))
 
-  validationSet <- labeledDataSet[validationSetPos, ]
-  trainingSet <- labeledDataSet[-validationSetPos, ]
+  trainingSet <- labeledDataSet[inTrainingSet, ]
+  validationSet <- labeledDataSet[-inTrainingSet, ]
 
   list(trainingSet = trainingSet, validationSet = validationSet)
 }
@@ -577,27 +573,35 @@ show_all_cross_table_graphs <- function() {
   models <- c(
       new('Model', name = 'rf-mother',
           method = predict_with_random_forest,
-          formula = formulaMotherRealFareSameTicket()),
+          formula = formulaMotherRealFareSameTicket())
 
-      new('Model', name = 'cif-mother',
+      , new('Model', name = 'rf-familysize',
+          method = predict_with_random_forest,
+          formula = formulaFamilySizeFactor())
+
+      , new('Model', name = 'rf-realfare',
+          method = predict_with_random_forest,
+          formula = formulaRealFareSameTicket())
+
+      , new('Model', name = 'cif-mother',
           method = predict_with_conditional_inference_forest,
-          formula = formulaMotherRealFareSameTicket()),
+          formula = formulaMotherRealFareSameTicket())
 
-      new('Model', name = 'cif-scaled-mother',
-          method = predict_with_conditional_inference_forest,
-          formula = formulaScaledMotherRealFareSameTicket()),
+#     , new('Model', name = 'cif-scaled-mother',
+#          method = predict_with_conditional_inference_forest,
+#          formula = formulaScaledMotherRealFareSameTicket())
 
-#      new('Model', name = 'svm-mother',
+#     , new('Model', name = 'svm-mother',
 #          method = predict_with_caret_svm,
-#          formula = formulaMotherRealFareSameTicket()),
+#          formula = formulaMotherRealFareSameTicket())
 #
-      new('Model', name = 'gbm-mother',
-          method = predict_with_caret_gbm2,
-          formula = formulaScaledMotherRealFareSameTicket()),
-
-      new('Model', name = 'svm-scaled-mother',
-          method = predict_with_caret_svm,
-          formula = formulaScaledMotherRealFareSameTicket())
+#     , new('Model', name = 'gbm-mother',
+#          method = predict_with_caret_gbm2,
+#          formula = formulaScaledMotherRealFareSameTicket())
+#
+#     , new('Model', name = 'svm-scaled-mother',
+#          method = predict_with_caret_svm,
+#          formula = formulaScaledMotherRealFareSameTicket())
   )
 
   graphs <- lapply(models, function(model) {
@@ -631,6 +635,13 @@ formulaMotherRealFareSameTicket <- function() {
 formulaFamilySizeFactor <- function() {
   SurvivedYn ~
       Pclass + Sex + Age + Fare + Embarked + Title + FamilySizeFactor
+}
+
+
+formulaRealFareSameTicket <- function() {
+  SurvivedYn ~
+      Pclass + Sex + Age + RealFare +
+      Embarked + Title + FamilySizeFactor + WithSameTicket
 }
 
 
