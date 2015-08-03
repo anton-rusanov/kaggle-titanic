@@ -15,7 +15,13 @@ library(rpart)
 library(stats)
 
 # Set seed for reproducibility
-set.seed(85431)
+set.seed(19653507)
+
+setClass('Model', slots = list(
+    name='character',
+    method = 'function',
+    formula = 'formula'))
+
 
 prepare_data <- function() {
   print('Started preparing data')
@@ -284,9 +290,9 @@ with_binary_columns <- function(data) {
 
 
 ## Writes the given solution to a file.
-write_solution <- function(prediction, method, suffix, passengerIds) {
+write_solution <- function(prediction, label, passengerIds) {
   solution <- data.frame(PassengerId = passengerIds, Survived = prediction)
-  write.csv(solution, file=paste0('titanic-', method, '-', suffix, '.csv'), row.names=FALSE, quote=FALSE)
+  write.csv(solution, file=paste0('titanic-', label, '.csv'), row.names=FALSE, quote=FALSE)
   return (solution)
 }
 
@@ -348,7 +354,8 @@ predict_with_predict_with_logistic_regression2 <- function(train, test) {
 
 
 ## Trains the Random Forest model and predicts 'Survived' for the test set.
-predict_with_random_forest <- function(train, test, formula, suffix, threshold = 0.5) {
+predict_with_random_forest <-
+    function(train, test, formula, suffix, threshold = 0.5, write = TRUE) {
   print(paste('Starting building model RF -', suffix))
 
   my_forest <- randomForest(
@@ -370,15 +377,17 @@ predict_with_random_forest <- function(train, test, formula, suffix, threshold =
   # Make your prediction using the test set
   predictionMatrix <- predict(my_forest, test, type = 'prob')
   prediction <- as.data.frame(predictionMatrix)
-  prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
-  write_solution(prediction01, 'rf', suffix, test$PassengerId)
+  if (write) {
+    prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
+    write_solution(prediction01, paste0('rf-', suffix), test$PassengerId)
+  }
   return (prediction)
 }
 
 
 ## Trains the Conditional Inference Forest model and predicts 'Survived' for the test set.
 predict_with_conditional_inference_forest <-
-    function(train, test, formula, suffix, threshold = 0.5) {
+    function(train, test, formula, suffix, threshold = 0.5, write = TRUE) {
   print(paste('Starting building model CI -', suffix))
   # TODO CI with and w/o WithSameTicket differ in 4 rows, but result in the same score.
   # TODO Run cross-validation to figure the better model!
@@ -399,29 +408,26 @@ predict_with_conditional_inference_forest <-
   predictionN <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[1]))
   predictionY <- sapply(predictionList, simplify = 'vector', FUN = function(x) (x[2]))
   prediction <- data.frame(Y = predictionY, N = predictionN)
-  prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
-  write_solution(prediction01, 'ci', suffix, test$PassengerId)
+  if (write) {
+    prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
+    write_solution(prediction01, paste0('ci-', suffix), test$PassengerId)
+  }
   return (prediction)
 }
 
 
-## Trains the Support Vector Machine model and predicts 'Survived' for the test set.
-predict_with_caret_svm <- function(train, test, formula, suffix, threshold = 0.5) {
-  predict_with_caret('svmRadial', train, test, formula, suffix, threshold)
-}
-
-
-## Trains a Stochastic Gradient Boosting model and predicts 'Survived' for the test set.
-predict_with_caret_gbm2 <- function(train, test, formula, suffix, threshold = 0.5) {
-  predict_with_caret('gbm', train, test, formula, suffix, threshold)
-}
-
-
-predict_with_caret <- function(method, train, test, formula, suffix, threshold = 0.5) {
-  print(paste('Starting building model', method, '-', suffix))
+train_with_caret <- function(method, train, formula, label, submitting = TRUE) {
+  print(paste('Starting building model', label))
+  if (submitting) {
+    repeats = 10
+    tuneLength = 16
+  } else {
+    repeats = 3
+    tuneLength = 8
+  }
   fitControl <- trainControl(method = 'repeatedcv',
       number = 10,
-      repeats = 3, # TODO Set 10
+      repeats = repeats,
       classProbs = TRUE,
       summaryFunction = twoClassSummary)
 
@@ -429,50 +435,76 @@ predict_with_caret <- function(method, train, test, formula, suffix, threshold =
     method = method,
     trControl = fitControl,
     preProc = c('center', 'scale'),
-    tuneLength = 8, # TODO: set 16
+    tuneLength = tuneLength,
     metric = 'ROC',
+    prob.model = TRUE,
     verbose = FALSE)
+}
 
-# ERROR:  undefined columns selected
-#  plot(fit,
-#      metric = 'Kappa',  # Only 'Accuracy' or 'Kappa' for classification
-#      plotType = 'line', # scatter, level, line
-#      #digits:
-#      output = 'layered' # data, ggplot, layered
-#  )
 
-  #TODO: need splitted data to check!
-#  confusionMatrix(fit,
-#      train,
-#      positive = 'Y')
-#      # prevalence = 0.25 # fraction of positives agains
-
-  print(paste('Starting prediction for ', method, '-', suffix))
-  prediction <- predict(fit, test, type = 'prob')
+predict_with_model <- function(trainedModel, test, method, label, threshold, write = TRUE) {
+  print(paste('Starting prediction for', label))
+  prediction <- predict(trainedModel, test, type = 'prob')
   prediction01 <- ifelse(prediction$Y >= threshold, 1, 0)
-  write_solution(prediction01, method, suffix, test$PassengerId)
+  if (write) {
+    write_solution(prediction01, label, test$PassengerId)
+  }
   return (prediction)
 }
 
 
-cross_validate <- function(partition, formula) {
+train_and_predict_with_caret <-
+    function(method, training, test, formula, label, threshold = 0.5, write = TRUE) {
+  trainedModel <- train_with_caret(method, training, formula, label, submitting = write)
+  predict_with_model(trainedModel, test, method, label, threshold, write)
+}
+
+
+## Trains the Support Vector Machine model and predicts 'Survived' for the test set.
+predict_with_caret_svm <- function(training, test, formula, suffix, threshold = 0.5, write = TRUE) {
+  train_and_predict_with_caret('svmRadial', training, test, formula, suffix, threshold, write)
+}
+
+
+## Trains a Stochastic Gradient Boosting model and predicts 'Survived' for the test set.
+predict_with_caret_gbm <- function(training, test, formula, suffix, threshold = 0.5, write = TRUE) {
+  train_and_predict_with_caret('gbm', training, test, formula, suffix, threshold, write)
+}
+
+
+predict_with_ksvm_laplacian <-
+    function(training, test, formula, label, threshold = 0.5, write = TRUE) {
+  modelComponents <- build_svm_laplacian_model_components(sigmaValues=c(0.0273), cValues = c(8))
+  train_and_predict_with_caret(modelComponents, training, test, formula, label, threshold, write)
+}
+
+
+build_svm_laplacian_model_components <- function(sigmaValues = NULL, cValues = NULL) {
   parameters <- data.frame(parameter = c('C', 'sigma'),
       class = rep('numeric', 2),
       label = c('Cost', 'Sigma'))
 
   grid <- function(x, y, len = NULL) {
-    library(kernlab)
-    ## This produces low, middle and high values for sigma
-    ## (i.e. a vector with 3 elements).
-    sigmas <- sigest(as.matrix(x), na.action = na.omit, scaled = TRUE)
-    expand.grid(sigma = mean(sigmas[-2]),
-        C = 2 ^((1:len) - 3)
-    )
+    if (is.null(sigmaValues)) {
+      ## This produces low, middle and high values for sigma
+      ## (i.e. a vector with 3 elements).
+      estSigmas <- sigest(as.matrix(x), na.action = na.omit, scaled = TRUE)
+      sigmas <- c(estSigmas[2], mean(estSigmas[-1]), mean(estSigmas[-2]), mean(estSigmas[-3]))
+    } else {
+      sigmas <- sigmaValues
+    }
+
+    if (is.null(cValues)) {
+      C <- 2 ^((1:len) - 3)
+    } else {
+      C <- cValues
+    }
+    expand.grid(sigma = sigmas, C = C)
   }
 
   fit <- function(x, y, wts, param, lev, last, weights, classProbs, ...) {
     ksvm(x = as.matrix(x), y = y,
-      kernel = rbfdot,
+      kernel = laplacedot, # rbfdot,
       kpar = list(sigma = param$sigma),
       C = param$C,
       ...)
@@ -495,7 +527,7 @@ cross_validate <- function(partition, formula) {
   levelsFunc <- function(x) lev(x)
 
   modelComponents <- list(
-      type = 'Classification', # TODO: c('Classification', 'Regression')
+      type = 'Classification',
       library = 'kernlab',
       loop = NULL,
       parameters = parameters,
@@ -506,35 +538,18 @@ cross_validate <- function(partition, formula) {
       sort = sortingFunc,
       levels = levelsFunc # only used for classification models using S4 methods
   )
+}
 
-  fitControl <- trainControl(method = 'repeatedcv',
-       ## 10-fold CV...
-       number = 10,
-       ## repeated ten times
-       repeats = 10, # TODO: 10!
-       classProbs = TRUE,
-       verbose = TRUE)
 
-  set.seed(825)
-  Laplacian <- train(formula, data = partition$trainingSet,
-                     method = modelComponents,
-                     preProc = c('center', 'scale'),
-                     tuneLength = 8,
-                     trControl = fitControl,
-                     prob.model = TRUE)
-  print(Laplacian, digits = 3)
-
-  plot(Laplacian,  scales = list(x = list(log = 2)))
-
-  show_model_performance(partition,
-      function(trainIgnored, test, formulaIgnored, suffixIgnored, thresholdIgnored) {
-        predict(Laplacian, test, type='prob')
-      },
-      formula,
-      'SVM with Laplacian',
-      0.5)
-
-  return (Laplacian)
+cross_validate_svm_laplacian <- function(partition, formula) {
+  modelComponents <- build_svm_laplacian_model_components()
+  trainedModel <-
+      train_with_caret(modelComponents, partition$trainingSet, formula, 'SVM with Laplacian')
+  predict_with_model(
+      trainedModel, partition$validationSet, modelComponents, 'SVM with Laplacian', 0.5,
+      write = FALSE)
+  print(trainedModel, digits = 3)
+  plot(trainedModel,  scales = list(x = list(log = 2)))
 }
 
 
@@ -544,26 +559,12 @@ predict_survival =  function() {
   # Split the data back into a train set and a test set
   train <- all_data[1:891,]
   test <- all_data[892:1309,]
-  
-  predict_with_cv_gbm2(train, test, formulaMotherRealFareSameTicket(), '1')
 
-  predict_with_caret_svm(train, test, formulaMotherRealFareSameTicket(), '1', 0.5)
+  models <- list_all_models()
 
-  predict_with_caret_svm(train, test, formulaScaledMotherRealFareSameTicket(), 'scaled', 0.5)
-
-  predict_with_logistic_regression(train, test)
-
-  rf_base_solution <- predict_with_random_forest(train, test,
-      formulaFamilySizeFactor(),
-      'base', 0.5)
-
-  cif_base_solution <- predict_with_conditional_inference_forest(train, test,
-      formulaFamilySizeFactor(),
-      'base', 0.5)
-
-  cif_mother_solution <- predict_with_conditional_inference_forest(train, test,
-      formulaMotherRealFareSameTicket(),
-      'mother', 0.5)
+  graphs <- lapply(models, function(model) {
+    model@method(train, test, model@formula, model@name)
+  })
 
   print('Done!')
 }
@@ -580,6 +581,7 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
 
   df <- data.frame(real=as.factor(actual$Survived), prediction=predicted$Y)
   df$pred_type <- v
+# TODO: Use this instead? confusionMatrix(fit, train, positive = 'Y', prevalence = 0.25)
 
   fp <- nrow(df[which(df$pred_type == 'FP'),])
   fn <- nrow(df[which(df$pred_type == 'FN'),])
@@ -611,7 +613,7 @@ partition_labeled_dataset <- function(labeledDataSet) {
 show_model_performance <-
     function(partition, predictorFunction, formula, suffix, threshold = 0.5) {
   predicted <- predictorFunction(
-      partition$trainingSet, partition$validationSet, formula, suffix, threshold)
+      partition$trainingSet, partition$validationSet, formula, suffix, threshold, write = FALSE)
 
   print('Plotting performance graphs')
   # TODO Plot graphs more compactly, so that they can be compared.
@@ -648,44 +650,7 @@ show_all_cross_table_graphs <- function() {
 
   partition <- partition_labeled_dataset(training)
 
-  setClass('Model', slots = list(
-      name='character',
-      method = 'function',
-      formula = 'formula'))
-
-  models <- c(
-      new('Model', name = 'rf-mother',
-          method = predict_with_random_forest,
-          formula = formulaMotherRealFareSameTicket())
-
-      , new('Model', name = 'rf-familysize',
-          method = predict_with_random_forest,
-          formula = formulaFamilySizeFactor())
-
-      , new('Model', name = 'rf-realfare',
-          method = predict_with_random_forest,
-          formula = formulaRealFareSameTicket())
-
-      , new('Model', name = 'cif-mother',
-          method = predict_with_conditional_inference_forest,
-          formula = formulaMotherRealFareSameTicket())
-
-#     , new('Model', name = 'cif-scaled-mother',
-#          method = predict_with_conditional_inference_forest,
-#          formula = formulaScaledMotherRealFareSameTicket())
-
-#     , new('Model', name = 'svm-mother',
-#          method = predict_with_caret_svm,
-#          formula = formulaMotherRealFareSameTicket())
-#
-#     , new('Model', name = 'gbm-mother',
-#          method = predict_with_caret_gbm2,
-#          formula = formulaScaledMotherRealFareSameTicket())
-#
-#     , new('Model', name = 'svm-scaled-mother',
-#          method = predict_with_caret_svm,
-#          formula = formulaScaledMotherRealFareSameTicket())
-  )
+  models <- list_all_models()
 
   graphs <- lapply(models, function(model) {
     show_model_performance(partition, model@method, model@formula, paste0(model@name, '-graph'))
@@ -727,6 +692,50 @@ formulaRealFareSameTicket <- function() {
       Embarked + Title + FamilySizeFactor + WithSameTicket
 }
 
+list_all_models <- function() {
+  c(
+  #      new('Model', name = 'rf-mother',
+  #          method = predict_with_random_forest,
+  #          formula = formulaMotherRealFareSameTicket())
+  #
+
+        new('Model', name = 'ksvm-laplacian-realfare',
+            method = predict_with_ksvm_laplacian,
+            formula = formulaRealFareSameTicket())
+
+  #      , new('Model', name = 'ksvm-laplacian-mother',
+  #          method = predict_with_ksvm_laplacian,
+  #          formula = formulaScaledMotherRealFareSameTicket())
+
+        , new('Model', name = 'rf-realfare',
+            method = predict_with_random_forest,
+            formula = formulaRealFareSameTicket())
+
+  #      , new('Model', name = 'cif-mother',
+  #          method = predict_with_conditional_inference_forest,
+  #          formula = formulaMotherRealFareSameTicket())
+
+  #     , new('Model', name = 'cif-scaled-mother',
+  #          method = predict_with_conditional_inference_forest,
+  #          formula = formulaScaledMotherRealFareSameTicket())
+
+       , new('Model', name = 'cif-realfare',
+            method = predict_with_conditional_inference_forest,
+            formula = formulaRealFareSameTicket())
+
+  #     , new('Model', name = 'svm-mother',
+  #          method = predict_with_caret_svm,
+  #          formula = formulaMotherRealFareSameTicket())
+  #
+  #     , new('Model', name = 'gbm-mother',
+  #          method = predict_with_caret_gbm,
+  #          formula = formulaScaledMotherRealFareSameTicket())
+  #
+  #     , new('Model', name = 'svm-scaled-mother',
+  #          method = predict_with_caret_svm,
+  #          formula = formulaScaledMotherRealFareSameTicket())
+    )
+}
 
 #predict_survival()
 
@@ -742,9 +751,10 @@ formulaRealFareSameTicket <- function() {
 #- Embarked is another important feature that dictates the survival of female??
 #- investigate caretEnsemble? Ada Boost?
 #- log(fare + 0.23)?
-#- Use PCA to reduce dimensions and get rid of multicollinearity
+#- Use PCA or Partial Least Squares (PLS) to reduce dimensions and get rid of multicollinearity
 #- Use ridge regression algorithm?
 #- results <- resamples(list(LVQ=modelLvq, GBM=modelGbm, SVM=modelSvm))
+#- Try to use global baseline approach
 
 #- Findings of exploratory analysis:
 #--- Pre-process and use cabin numbers: split series and fix bad ones, like F E46.
