@@ -1,5 +1,5 @@
 library(kernlab)
-source('titanic-commons.r')
+source('commons.r')
 
 
 ## Builds the caret model configuration for ksvm method.  
