@@ -48,9 +48,11 @@ build_svm_laplacian_model_config <- function(sigmaValues = NULL, cValues = NULL)
 
   # We are lucky that kernlab has this class level extraction function implemented for us.
   # party:::ctree would have to use: function(x) levels(x@data@get('response')[,1])
-  levelsFunc <- function(x) lev(x)
+  levelsFunc <- function(x) {
+    lev(x)
+  }
 
-  modelComponents <- list(
+  modelConfig <- list(
       type = 'Classification',
       library = 'kernlab',
       loop = NULL,
@@ -68,18 +70,19 @@ build_svm_laplacian_model_config <- function(sigmaValues = NULL, cValues = NULL)
 ## Cross-validates SVM with Laplacian kernel using caret and prints the best model parameters.
 ## Returns the prediction for the validation set.
 cross_validate_svm_laplacian <- function(partition, formula) {
-  modelComponents <- build_svm_laplacian_model_config()
+  modelConfig <- build_svm_laplacian_model_config(sigmaValues=c(0.03038), cValues = c(8, 4))
   trainedModel <-
-      train_with_caret(modelComponents, partition$trainingSet, formula, 'SVM with Laplacian')
-  print(trainedModel, digits = 3)
-  plot(trainedModel,  scales = list(x = list(log = 2)))
+      train_with_caret(modelConfig, partition$trainingSet, formula, 'SVM with Laplacian',
+          prob.model = TRUE)
+  print(trainedModel, digits = 4)
+#  plot(trainedModel,  scales = list(x = list(log = 2)))
   predict_with_model(trainedModel, partition$validationSet, 'SVM with Laplacian')
 }
 
 
 ## Predicts the unknowns of the test set using ksvm with Laplacian kernel and preset meta params.
 predict_with_ksvm_laplacian <-
-    function(training, test, formula, label, threshold = 0.5) {
-  modelComponents <- build_svm_laplacian_model_config(sigmaValues=c(0.0273), cValues = c(8))
-  train_and_predict_with_caret(modelComponents, training, test, formula, label, threshold)
+    function(training, test, formula, label) {
+  modelConfig <- build_svm_laplacian_model_config(sigmaValues=c(0.03038), cValues = c(8))
+  train_and_predict_with_caret(modelConfig, training, test, formula, label, prob.model = TRUE)
 }

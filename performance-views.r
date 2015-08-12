@@ -49,7 +49,7 @@ show_cross_table_graph <- function(actual, predicted, label, threshold = 0.5) {
 show_model_performance <-
     function(partition, predictorFunction, formula, label, threshold = 0.5) {
   predicted <- predictorFunction(
-      partition$trainingSet, partition$validationSet, formula, label, threshold)
+      partition$trainingSet, partition$validationSet, formula, label)
 
   print('Plotting performance graphs')
   # TODO Plot graphs more compactly, so that they can be compared.
@@ -66,7 +66,7 @@ show_model_performance <-
 
   # ROC area under the curve
   auc <- performance(pred, 'auc')@y.values
-  print(paste('AUC:', auc))
+  print(sprintf('AUC: %.3f', auc))
 
   # F1 score
   f1Perf <- performance(pred, 'f')
@@ -74,7 +74,7 @@ show_model_performance <-
 
   # RMSE
   rmse <- performance(pred, 'rmse')@y.values
-  print(paste('RMSE:', rmse))
+  print(sprintf('RMSE: %.3f', rmse))
 
   show_cross_table_graph(partition$validationSet, predicted, label, threshold)
 }

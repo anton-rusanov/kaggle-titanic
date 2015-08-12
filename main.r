@@ -62,28 +62,37 @@ list_all_models <- function() {
   #          formula = formulaMotherRealFareSameTicket())
   #
 
-        new('Model', name = 'ksvm-laplacian-realfare',
-            method = predict_with_ksvm_laplacian,
-            formula = formulaRealFareSameTicket())
+#        new('Model', name = 'ksvm-laplacian-realfare',
+#            method = predict_with_ksvm_laplacian,
+#            formula = formulaRealFareSameTicket())
 
   #      , new('Model', name = 'ksvm-laplacian-mother',
   #          method = predict_with_ksvm_laplacian,
   #          formula = formulaScaledMotherRealFareSameTicket())
 
-        , new('Model', name = 'rf-realfare',
+        new('Model', name = 'randomForest-realfare',
             method = predict_with_random_forest,
             formula = formulaRealFareSameTicket())
 
+        ,new('Model', name = 'rf-realfare',
+            method = predict_with_rf,
+            formula = formulaRealFareSameTicket())
+#        ,new('Model', name = 'rf-realfare-scaled',
+#            method = predict_with_random_forest,
+#            formula = formulaScaledRealFareSameTicket())
   #      , new('Model', name = 'cif-mother',
   #          method = predict_with_conditional_inference_forest,
   #          formula = formulaMotherRealFareSameTicket())
 
-  #     , new('Model', name = 'cif-scaled-mother',
-  #          method = predict_with_conditional_inference_forest,
-  #          formula = formulaScaledMotherRealFareSameTicket())
+#       , new('Model', name = 'cif-scaled-mother',
+#            method = predict_with_conditional_inference_forest,
+#            formula = formulaScaledMotherRealFareSameTicket())
 
-       , new('Model', name = 'cif-realfare',
-            method = predict_with_conditional_inference_forest,
+#       , new('Model', name = 'cif-realfare-scaled',
+#            method = predict_with_conditional_inference_forest,
+#            formula = formulaScaledRealFareSameTicket())
+       , new('Model', name = 'cf-realfare',
+            method = predict_with_cforest,
             formula = formulaRealFareSameTicket())
 
   #     , new('Model', name = 'svm-mother',
@@ -105,19 +114,21 @@ list_all_models <- function() {
 # TODO
 #- DONE Exploratory analysis in Excel
 #- DONE Scale and center numeric features, esp. Fare
-#- Set up cross-validation
-#- Use ROC, accuracy, or Kappa as benchmark?
+#- DONE Set up cross-validation
+#- DONE Use ROC, __accuracy__, or Kappa as benchmark?
+#- Use PCA or Partial Least Squares (PLS) to reduce dimensions and get rid of m15y, see prcomp
+#- Naive Bayes, since it tends to work better on small training sets
+#- Logistic Regression
+#- Ridge Regression
 #- Use more family-related insight (how many of them survived/perished/unknown?) kNN? Special rules.
-#- LR
 #- Use cabin data
 #- Ensemble the models using probabilistic approach
 #- Embarked is another important feature that dictates the survival of female??
 #- investigate caretEnsemble? Ada Boost?
 #- log(fare + 0.23)?
-#- Use PCA or Partial Least Squares (PLS) to reduce dimensions and get rid of multicollinearity
-#- Use ridge regression algorithm?
 #- results <- resamples(list(LVQ=modelLvq, GBM=modelGbm, SVM=modelSvm))
 #- Try to use global baseline approach
+#- Try to use "Reusable holdout set" approach: http://www.sciencemag.org/content/349/6248/636
 
 #- Findings of exploratory analysis:
 #--- Pre-process and use cabin numbers: split series and fix bad ones, like F E46.

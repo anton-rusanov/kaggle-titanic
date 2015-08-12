@@ -20,6 +20,17 @@ formulaFamilySizeFactor <- function() {
 
 formulaRealFareSameTicket <- function() {
   SurvivedYn ~
-      Pclass + Sex + Age + RealFare +
+      Pclass + Sex + Age + RealFare + Embarked + Title + FamilySizeFactor + WithSameTicket
+}
+
+formulaScaledRealFareSameTicket <- function() {
+  SurvivedYn ~
+      Pclass + Sex + AgeScaled + RealFareScaled +
       Embarked + Title + FamilySizeFactor + WithSameTicket
+}
+
+formulaScaledRealFare <- function() {
+  SurvivedYn ~
+      Pclass + Sex + AgeScaled + RealFareScaled +
+      Embarked + Title + FamilySizeFactor
 }
