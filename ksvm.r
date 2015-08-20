@@ -84,5 +84,6 @@ cross_validate_svm_laplacian <- function(partition, formula) {
 predict_with_ksvm_laplacian <-
     function(training, test, formula, label) {
   modelConfig <- build_svm_laplacian_model_config(sigmaValues=c(0.03038), cValues = c(8))
-  train_and_predict_with_caret(modelConfig, training, test, formula, label, prob.model = TRUE)
+  train_and_predict_with_caret(modelConfig, training, test, formula, label, list(tuneLength = 12),
+      prob.model = TRUE)
 }

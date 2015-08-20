@@ -14,6 +14,7 @@ source('conditional-inference-forest.r')
 source('caret-methods.r')
 source('ksvm.r')
 source('performance-views.r')
+source('pca.r')
 
 setClass('Model', slots = list(
     name='character',
@@ -24,13 +25,13 @@ setClass('Model', slots = list(
 ## Predicts survival using all models returned by list_all_models().
 predict_survival =  function() {
   all_data <- prepare_data()
-  # Split the data back into a train set and a test set
-  train <- all_data[1:891,]
+  # Split the data back into a training set and a test set
+  training <- all_data[1:891,]
   test <- all_data[892:1309,]
 
   models <- list_all_models()
   lapply(models, function(model) {
-    prediction <- model@method(train, test, model@formula, model@name)
+    prediction <- model@method(training, test, model@formula, model@name)
     write_solution(prediction, model@name, test$PassengerId, 0.5)
   })
   print('Done!')
@@ -62,15 +63,15 @@ list_all_models <- function() {
   #          formula = formulaMotherRealFareSameTicket())
   #
 
-#        new('Model', name = 'ksvm-laplacian-realfare',
-#            method = predict_with_ksvm_laplacian,
-#            formula = formulaRealFareSameTicket())
+        new('Model', name = 'ksvm-laplacian-realfare',
+            method = predict_with_ksvm_laplacian,
+            formula = formulaRealFareSameTicket())
 
   #      , new('Model', name = 'ksvm-laplacian-mother',
   #          method = predict_with_ksvm_laplacian,
   #          formula = formulaScaledMotherRealFareSameTicket())
 
-        new('Model', name = 'randomForest-realfare',
+        , new('Model', name = 'randomForest-realfare',
             method = predict_with_random_forest,
             formula = formulaRealFareSameTicket())
 
@@ -95,13 +96,13 @@ list_all_models <- function() {
             method = predict_with_cforest,
             formula = formulaRealFareSameTicket())
 
-  #     , new('Model', name = 'svm-mother',
-  #          method = predict_with_caret_svm,
-  #          formula = formulaMotherRealFareSameTicket())
-  #
-  #     , new('Model', name = 'gbm-mother',
-  #          method = predict_with_caret_gbm,
-  #          formula = formulaScaledMotherRealFareSameTicket())
+       , new('Model', name = 'svm-pclassinv',
+            method = predict_with_caret_svm,
+            formula = formulaRealFareSameTicketPclassInv())
+
+#       , new('Model', name = 'gbm-mother',
+#            method = predict_with_caret_gbm,
+#            formula = formulaScaledMotherRealFareSameTicket())
   #
   #     , new('Model', name = 'svm-scaled-mother',
   #          method = predict_with_caret_svm,
@@ -116,7 +117,7 @@ list_all_models <- function() {
 #- DONE Scale and center numeric features, esp. Fare
 #- DONE Set up cross-validation
 #- DONE Use ROC, __accuracy__, or Kappa as benchmark?
-#- Use PCA or Partial Least Squares (PLS) to reduce dimensions and get rid of m15y, see prcomp
+#- DONE Use PCA or Partial Least Squares (PLS) to reduce dimensions and get rid of m15y, see prcomp
 #- Naive Bayes, since it tends to work better on small training sets
 #- Logistic Regression
 #- Ridge Regression

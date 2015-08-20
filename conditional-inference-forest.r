@@ -109,9 +109,7 @@ cross_validate_cforest <- function(partition, formula) {
 
 predict_with_cforest <- function(training, test, formula, label) {
   modelConfig <- build_cforest_model_config(mtry = 10, mincriterion = 0)
-  trainedModel <- train_with_caret(modelConfig, training, formula, 'cforest',
-      trainConfig = list(
-          method = 'repeatedcv', repeats = 3, tuneLength = 16, verbose = FALSE))
+  trainedModel <- train_with_caret(modelConfig, training, formula, 'cforest')
   print(trainedModel, digits = 3)
   predict_with_model(trainedModel, test, 'cforest')
 }

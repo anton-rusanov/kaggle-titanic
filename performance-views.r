@@ -76,6 +76,10 @@ show_model_performance <-
   rmse <- performance(pred, 'rmse')@y.values
   print(sprintf('RMSE: %.3f', rmse))
 
+  # Accuracy
+  acc <- performance(pred, 'acc')
+  plot(acc, main = label)
+
   show_cross_table_graph(partition$validationSet, predicted, label, threshold)
 }
 

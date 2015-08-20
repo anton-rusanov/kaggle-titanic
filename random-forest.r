@@ -43,9 +43,13 @@ build_rf_model_config <- function(mtryValues = NULL) {
     data.frame(mtry = mtrys)
   }
 
+  fit <- function (x, y, wts, param, lev, last, classProbs, ...) {
+    randomForest(x, y, mtry = param$mtry, ntree = 5000, ...)
+  }
+
   modelConfig <- list(
-      grid = modelInfo$rf$grid,
-      fit = modelInfo$rf$fit,
+      grid = grid,
+      fit = fit,
       parameters = modelInfo$rf$parameters,
       type = modelInfo$rf$type,
       library = modelInfo$rf$library,
@@ -66,8 +70,7 @@ cross_validate_rf <- function(partition, formula) {
   modelConfig <- build_rf_model_config()
   trainedModel <-
       train_with_caret(modelConfig, partition$trainingSet, formula, 'rf',
-      trainConfig = list(
-                method = 'repeatedcv', repeats = 1, tuneLength = 16, verbose = TRUE))
+      trainConfig = list(verbose = TRUE))
   print(trainedModel, digits = 3)
   plot(trainedModel,  scales = list(x = list(log = 2)))
   predict_with_model(trainedModel, partition$validationSet, 'rf')
@@ -76,9 +79,7 @@ cross_validate_rf <- function(partition, formula) {
 
 predict_with_rf <- function(training, test, formula, label) {
   modelConfig <- build_rf_model_config(mtryValues = c(4))
-  trainedModel <- train_with_caret(modelConfig, training, formula, 'rf',
-      trainConfig = list(
-          method = 'repeatedcv', repeats = 3, tuneLength = 16, verbose = FALSE))
+  trainedModel <- train_with_caret(modelConfig, training, formula, 'rf')
   print(trainedModel, digits = 3)
   predict_with_model(trainedModel, test, 'rf')
 }

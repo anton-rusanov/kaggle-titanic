@@ -69,6 +69,10 @@ prepare_data <- function() {
 
   all_data$Mother <- create_is_mother(all_data)
 
+  all_data$PclassInv <- create_pclass_inverted(all_data)
+
+  all_data$EmbarkedOrder <- create_embarked_order_numeric(all_data)
+
   print('Finished preparing data')
 
   write.csv(all_data, file='all-data.csv', row.names=FALSE, quote=FALSE)
@@ -277,3 +281,20 @@ create_is_mother <- function(data) {
   return (data$Mother)
 }
 
+
+## Creates a numeric column with inverted Pclass.
+create_pclass_inverted <- function(data) {
+  print('Creating a inverted value for Pclass')
+  PclassNum <- as.numeric(as.character(data$Pclass))
+  #  x == 1 => 2 - 1 = 1
+  #  x == 2 => 1.58 - 1 = 0.58
+  #  x == 3 => 1 - 1 = 0
+  (log2(5 - PclassNum) - 1)
+}
+
+
+## Creates a numeric feature from Embarked, corresponding to the number of the stop.
+create_embarked_order_numeric <- function(data) {
+  print('Creating a numeric value for Embarked, in order')
+  ifelse(data$Embarked == 'S', 1., ifelse(data$Embarked == 'C', 2., 3.))
+}

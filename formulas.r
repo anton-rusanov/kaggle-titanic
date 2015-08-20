@@ -34,3 +34,15 @@ formulaScaledRealFare <- function() {
       Pclass + Sex + AgeScaled + RealFareScaled +
       Embarked + Title + FamilySizeFactor
 }
+
+formulaRealFareSameTicketPclassInv <- function() {
+  SurvivedYn ~
+      PclassInv + Sex + Age + RealFare +
+      EmbarkedOrder + Title + FamilySizeFactor + WithSameTicket
+}
+
+formulaPca <- function() {
+  ~ PclassInv + AgeScaled + RealFareScaled + FamilySize + WithSameTicket + EmbarkedOrder +
+      as.numeric(SexFemale)
+}
+
